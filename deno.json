@@ -1,0 +1,10 @@
+{
+  "nodeModulesDir": "manual",
+  "deploy": {
+    "install": "npm ci",
+    "runtime": {
+      "type": "dynamic",
+      "entrypoint": "index.js"
+    }
+  }
+}
