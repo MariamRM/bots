@@ -175,7 +175,7 @@ function createModeration({ reply, api, env = process.env, now = Date.now, seenS
         try {
           if (action === 'on') {
             const started = await seenStore.start(groupId);
-            return say(started ? '🟢 Seen Mode enabled\n\nAvi will greet each user once when they write.\nUse /avi seen off to close it.' : '⚠️ Seen Mode is already active.\n\nClose it first:\n/avi seen off');
+            return say(started ? '🟢 Seen Mode enabled' : '⚠️ Seen Mode is already active.\n\nClose it first:\n/avi seen off');
           }
           if (action === 'off') {
             await seenStore.stop(groupId);

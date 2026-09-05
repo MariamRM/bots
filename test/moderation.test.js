@@ -288,6 +288,17 @@ test('Seen ON cannot restart an active session, OFF followed by ON starts a fres
   assert.equal(f.replies.at(-1).altText, 'Hey Member.');
 });
 
+test('Seen confirmation is short and the opener is greeted on their next message once', async () => {
+  const f = setup();
+  await f.bot.handle(f.event('/avi seen on', owner));
+  assert.equal(f.replies.at(-1), '🟢 Seen Mode enabled');
+  await f.bot.handle(f.event('hello', owner));
+  assert.equal(f.replies.at(-1).type, 'flex');
+  const count = f.replies.length;
+  await f.bot.handle(f.event('hello again', owner));
+  assert.equal(f.replies.length, count);
+});
+
 test('each user is greeted once per group; messages in another group stay silent', async () => {
   const f = setup();
   await f.bot.handle(f.event('/avi seen on', admin));
