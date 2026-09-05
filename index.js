@@ -75,6 +75,7 @@ app.get("/", (req, res) => {
 });
 
 async function replyMessage(replyToken, text) {
+  const messages = typeof text === 'string' ? [{ type: 'text', text }] : Array.isArray(text) ? text : [text];
   const response = await fetch(
     "https://api.line.me/v2/bot/message/reply",
     {
@@ -86,12 +87,7 @@ async function replyMessage(replyToken, text) {
       },
       body: JSON.stringify({
         replyToken,
-        messages: [
-          {
-            type: "text",
-            text
-          }
-        ]
+        messages
       })
     }
   );

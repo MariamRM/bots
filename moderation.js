@@ -1,9 +1,15 @@
 const crypto = require('node:crypto');
+const { createSeenStore, SEEN_SETUP_MESSAGE } = require('./seen-store');
+const { greetingCard, adminCard, seenCard } = require('./cards');
 
 const HELP = `Avi group protection
 /avi help — commands and limits
 /avi id — your bot user ID and this group ID
 Bot admins, inside their assigned group:
+/avi admin — AVI ADMIN menu
+. — quick admin greeting (ordinary members get no reply)
+/avi seen on — start one greeting per user per session
+/avi seen off — end the session; ON again starts a new list
 /avi status — group name, member count and monitoring status
 /avi members — recently observed users (not a complete member list)
 /avi seen @person — last event observed by this bot instance
@@ -18,7 +24,7 @@ Bot admins are configured by the owner in GROUP_ADMIN_IDS.
 Warnings/activity are temporary and separate for each group and server instance.
 Avi cannot kick/invite users, change join links, appoint LINE admins, read private chats between others, or show online/read status.`;
 
-function createModeration({ reply, api, env = process.env, now = Date.now }) {
+function createModeration({ reply, api, env = process.env, now = Date.now, seenStore = createSeenStore({ env }) }) {
   const owners = new Set((env.BOT_OWNER_IDS || '').split(',').map(id => id.trim()).filter(Boolean));
   let admins;
   try {
@@ -67,10 +73,14 @@ function createModeration({ reply, api, env = process.env, now = Date.now }) {
     }
     const groupId = event.source?.type === 'group' ? event.source.groupId : null;
     const userId = event.source?.userId;
-    const say = text => event.replyToken ? reply(event.replyToken, text.slice(0, 4900)) : Promise.resolve();
+    const say = message => event.replyToken ? reply(event.replyToken, typeof message === 'string' ? message.slice(0, 4900) : message) : Promise.resolve();
     let group;
     if (groupId) {
-      if (event.type === 'leave') { groups.delete(groupId); return; }
+      if (event.type === 'leave') {
+        groups.delete(groupId);
+        try { await seenStore.stop(groupId); } catch { console.error('Could not close Seen session after leaving group'); }
+        return;
+      }
       if (!groups.has(groupId)) {
         if (groups.size >= 200) groups.delete(groups.keys().next().value);
         groups.set(groupId, { users: new Map(), lastSeen: timestamp });
@@ -89,7 +99,7 @@ function createModeration({ reply, api, env = process.env, now = Date.now }) {
             memberState.lastObserved = timestamp;
           }
         }
-        return say('Welcome! Avi checks new group messages for spam. Type /avi help for commands and limits.');
+        return;
       }
       if (event.type === 'memberLeft') {
         for (const member of event.left?.members || []) group.users.delete(member.userId);
@@ -105,11 +115,26 @@ function createModeration({ reply, api, env = process.env, now = Date.now }) {
     user.lastObserved = timestamp;
     if (event.message?.type !== 'text' || typeof event.message.text !== 'string') return;
     const text = event.message.text;
+    const authorized = owners.has(userId) || Boolean(group && Object.hasOwn(admins, groupId) && admins[groupId].includes(userId));
+    const allowCommand = () => {
+      user.commandTimes = (user.commandTimes || []).filter(time => timestamp - time < 10000);
+      if (user.commandTimes.length >= 6) return false;
+      user.commandTimes.push(timestamp);
+      return true;
+    };
+    const displayName = async () => {
+      try {
+        const profile = await api(group ? `/group/${encodeURIComponent(groupId)}/member/${encodeURIComponent(userId)}` : `/profile/${encodeURIComponent(userId)}`);
+        return profile.displayName || 'there';
+      } catch { return 'there'; }
+    };
+    if (text.trim() === '.') {
+      if (!authorized || !allowCommand()) return;
+      return say(greetingCard(await displayName(), true));
+    }
     const command = text.trim().match(/^\/avi(?:\s+(\S+))?(?:\s|$)/i);
     if (command) {
-      user.commandTimes = (user.commandTimes || []).filter(time => timestamp - time < 10000);
-      if (user.commandTimes.length >= 6) return;
-      user.commandTimes.push(timestamp);
+      if (!allowCommand()) return;
       const name = (command[1] || 'help').toLowerCase();
       if (name === 'help') return say(HELP);
       if (name === 'id') return say(`Your user ID: ${userId}${groupId ? `\nGroup ID: ${groupId}` : ''}`);
@@ -118,10 +143,26 @@ function createModeration({ reply, api, env = process.env, now = Date.now }) {
         const rows = [...groups.entries()].slice(-50).map(([id, g]) => `${g.name || 'Group'} | ${id}\nLast event: ${new Date(g.lastSeen).toISOString()}`);
         return say(`Recently observed groups on this instance (not a full list; clears on restart):\n${rows.join('\n') || 'None observed here yet.'}`);
       }
-      if (!['status', 'members', 'seen', 'warn', 'warnings', 'reset'].includes(name)) return say('Unknown command. Type /avi help. Invitations, kicks, join-link controls and LINE admin promotion must be handled in LINE; Avi has no API for these actions.');
+      if (!['admin', 'protection', 'status', 'members', 'seen', 'warn', 'warnings', 'reset'].includes(name)) return say('Unknown command. Type /avi help. Invitations, kicks, join-link controls and LINE admin promotion must be handled in LINE; Avi has no API for these actions.');
       if (!group) return say('Use this command inside the regular LINE group you want to manage.');
-      const authorized = owners.has(userId) || (Object.hasOwn(admins, groupId) && admins[groupId].includes(userId));
       if (!authorized) return say('This command requires bot-admin permission for this group. The bot owner configures BOT_OWNER_IDS and GROUP_ADMIN_IDS in Deno settings.');
+      if (name === 'admin') return say(adminCard());
+      if (name === 'protection') return say('🔐 Protection is active: flood/repetition checks and configured blocked words/domains. Seen Mode is a separate greeting feature; switching it off keeps protection active. Invite/remove members inside LINE.');
+      if (name === 'seen' && /^\/avi\s+seen(?:\s+(on|off))?\s*$/i.test(text.trim())) {
+        const action = text.trim().split(/\s+/)[2]?.toLowerCase();
+        try {
+          if (action === 'on') {
+            const started = await seenStore.start(groupId);
+            return say(started ? '🟢 Seen Mode enabled\n\nAvi will greet each user once when they write.\nUse /avi seen off to close it.' : '⚠️ Seen Mode is already active.\n\nClose it first:\n/avi seen off');
+          }
+          if (action === 'off') {
+            await seenStore.stop(groupId);
+            return say('🔴 Seen Mode disabled');
+          }
+          return say(seenCard(Boolean((await seenStore.get(groupId))?.active)));
+        } catch { return say(SEEN_SETUP_MESSAGE); }
+      }
+      if (name === 'warnings' && /^\/avi\s+warnings\s*$/i.test(text.trim())) return say('⚠️ Warnings\n/avi warn @person — record a warning\n/avi warnings @person — view totals\n/avi reset @person — clear totals\nSelect a real LINE @mention.');
       if (name === 'status') {
         try {
           const [summary, count] = await Promise.all([
@@ -172,13 +213,30 @@ function createModeration({ reply, api, env = process.env, now = Date.now }) {
       } catch { return false; }
     });
     if (suspicious) { reasons.push('Suspicious link'); points += 5; }
-    if (!reasons.length) return;
+    const announce = async alert => {
+      let card;
+      if (group && event.replyToken) {
+        try {
+          const session = await seenStore.get(groupId);
+          if (session?.active && !session.greeted.includes(userId)) {
+            const name = await displayName();
+            if (await seenStore.claim(groupId, session.id, userId)) {
+              const current = await seenStore.get(groupId);
+              if (current?.active && current.id === session.id) card = greetingCard(name);
+            }
+          }
+        } catch { /* Seen storage failures must not interrupt protection or cause repeated replies. */ }
+      }
+      if (alert && card) return say([{ type: 'text', text: alert }, card]);
+      if (alert || card) return say(alert || card);
+    };
+    if (!reasons.length) return announce();
     user.warnings++;
     user.riskScore += points;
     // Limit automatic alert volume while continuing to count violations.
-    if (user.lastAlert !== undefined && timestamp - user.lastAlert < 10000) return;
+    if (user.lastAlert !== undefined && timestamp - user.lastAlert < 10000) return announce();
     user.lastAlert = timestamp;
-    return say(`⚠️ Avi Protection Alert\nUser: ${userId}\nReason: ${reasons.join(', ')}\nWarnings: ${user.warnings}\nRisk Score: ${user.riskScore}\nTemporary totals. A group member must handle any removal manually.`);
+    return announce(`⚠️ Avi Protection Alert\nUser: ${userId}\nReason: ${reasons.join(', ')}\nWarnings: ${user.warnings}\nRisk Score: ${user.riskScore}\nTemporary totals. A group member must handle any removal manually.`);
   }
   return { handle };
 }

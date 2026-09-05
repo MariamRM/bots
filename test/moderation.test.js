@@ -8,12 +8,13 @@ const member = 'U' + '3'.repeat(32);
 const groupA = 'C' + 'a'.repeat(32);
 const groupB = 'C' + 'b'.repeat(32);
 
-function setup() {
+function setup(options = {}) {
   const replies = [];
   const calls = [];
   let time = 1700000000000;
   let apiFails = false;
   const bot = createModeration({
+    ...options,
     env: { BOT_OWNER_IDS: owner, GROUP_ADMIN_IDS: JSON.stringify({ [groupA]: [admin] }) },
     now: () => time,
     reply: async (token, text) => replies.push(text),
@@ -180,4 +181,123 @@ test('command spam is bounded, including unknown commands', async () => {
   f.tick(10000);
   await f.bot.handle(f.event('/avi help'));
   assert.equal(f.replies.length, 7);
+});
+
+test('dot greets admins but is completely silent for ordinary users, even during Seen Mode', async () => {
+  const f = setup();
+  await f.bot.handle(f.event('/avi seen on', admin));
+  f.replies.length = 0;
+  for (let i = 0; i < 10; i++) await f.bot.handle(f.event('.'));
+  assert.equal(f.replies.length, 0);
+  await f.bot.handle(f.event('.', admin));
+  assert.equal(f.replies[0].type, 'flex');
+  assert.equal(f.replies[0].altText, 'Hey Member. Avi is active.');
+  await f.bot.handle(f.event('.', admin, groupB));
+  assert.equal(f.replies.length, 1);
+  await f.bot.handle(f.event('.', owner, null));
+  assert.equal(f.replies.length, 2);
+});
+
+test('only authorized group admins can change Seen Mode or open the admin menu', async () => {
+  const f = setup();
+  for (const command of ['seen on', 'seen off', 'admin', 'protection']) {
+    await f.bot.handle(f.event('/avi ' + command));
+    assert.match(f.replies.at(-1), /requires bot-admin permission/);
+  }
+  await f.bot.handle(f.event('/avi seen on', admin, groupB));
+  assert.match(f.replies.at(-1), /requires bot-admin permission/);
+  await f.bot.handle(f.event('/avi seen on', owner, null));
+  assert.match(f.replies.at(-1), /inside the regular LINE group/);
+});
+
+test('Seen ON cannot restart an active session, OFF followed by ON starts a fresh list', async () => {
+  const f = setup();
+  await f.bot.handle(f.event('hello'));
+  assert.equal(f.replies.length, 0);
+  await f.bot.handle(f.event('/avi seen on', admin));
+  assert.match(f.replies.at(-1), /Seen Mode enabled/);
+  await f.bot.handle(f.event('first greeting'));
+  assert.equal(f.replies.at(-1).altText, 'Hey Member.');
+  await f.bot.handle(f.event('/avi seen on', admin));
+  assert.match(f.replies.at(-1), /already active/);
+  const count = f.replies.length;
+  await f.bot.handle(f.event('second text'));
+  assert.equal(f.replies.length, count);
+  await f.bot.handle(f.event('/avi seen off', admin));
+  assert.match(f.replies.at(-1), /Seen Mode disabled/);
+  await f.bot.handle(f.event('third text'));
+  assert.equal(f.replies.length, count + 1);
+  await f.bot.handle(f.event('/avi seen on', admin));
+  f.tick(10001);
+  await f.bot.handle(f.event('new session greeting'));
+  assert.equal(f.replies.at(-1).altText, 'Hey Member.');
+});
+
+test('each user is greeted once per group; messages in another group stay silent', async () => {
+  const f = setup();
+  await f.bot.handle(f.event('/avi seen on', admin));
+  await f.bot.handle(f.event('one', member, groupB));
+  assert.equal(f.replies.length, 1);
+  await f.bot.handle(f.event('two'));
+  await f.bot.handle(f.event('three', owner));
+  await f.bot.handle(f.event('four'));
+  assert.equal(f.replies.filter(message => message.type === 'flex').length, 2);
+});
+
+test('simultaneous messages from the same user produce only one greeting', async () => {
+  const f = setup();
+  await f.bot.handle(f.event('/avi seen on', admin));
+  await Promise.all([f.bot.handle(f.event('one')), f.bot.handle(f.event('two'))]);
+  assert.equal(f.replies.filter(message => message.type === 'flex').length, 1);
+});
+
+test('Seen Mode does not suppress moderation and combines messages into one reply', async () => {
+  const f = setup();
+  await f.bot.handle(f.event('/avi seen on', admin));
+  await f.bot.handle(f.event('badword1'));
+  assert.equal(f.replies.length, 2);
+  assert.equal(f.replies[1].length, 2);
+  assert.match(f.replies[1][0].text, /Blocked word/);
+  assert.equal(f.replies[1][1].type, 'flex');
+});
+
+test('unavailable Seen storage fails closed but normal protection still works', async () => {
+  const fail = async () => { throw new Error('offline'); };
+  const f = setup({ seenStore: { get: fail, start: fail, stop: fail } });
+  await f.bot.handle(f.event('/avi seen on', admin));
+  assert.match(f.replies.at(-1), /needs shared storage/);
+  await f.bot.handle(f.event('ordinary message'));
+  assert.equal(f.replies.length, 1);
+  await f.bot.handle(f.event('badword1'));
+  assert.match(f.replies.at(-1), /Blocked word/);
+});
+
+test('profile failures use a short greeting without exposing IDs', async () => {
+  const f = setup();
+  await f.bot.handle(f.event('/avi seen on', admin));
+  f.failApi();
+  await f.bot.handle(f.event('hello'));
+  assert.equal(f.replies.at(-1).altText, 'Hey there.');
+});
+
+test('admin menu and Seen controls send actionable Flex cards', async () => {
+  const f = setup();
+  await f.bot.handle(f.event('/avi admin', admin));
+  assert.equal(f.replies.at(-1).type, 'flex');
+  const actions = f.replies.at(-1).contents.body.contents.filter(item => item.type === 'button').map(item => item.action.text);
+  assert.deepEqual(actions, ['/avi seen', '/avi warnings', '/avi members', '/avi status', '/avi protection']);
+  await f.bot.handle(f.event('/avi seen', admin));
+  assert.equal(f.replies.at(-1).altText, 'Seen Mode: OFF');
+  await f.bot.handle(f.event('/avi warnings', admin));
+  assert.match(f.replies.at(-1), /view totals/);
+});
+
+test('membership joins do not trigger Seen greetings', async () => {
+  const f = setup();
+  await f.bot.handle(f.event('/avi seen on', admin));
+  f.replies.length = 0;
+  await f.bot.handle({ type: 'memberJoined', source: { type: 'group', groupId: groupA }, joined: { members: [{ userId: member }] }, replyToken: 'fake' });
+  assert.equal(f.replies.length, 0);
+  await f.bot.handle(f.event('hello'));
+  assert.equal(f.replies.at(-1).altText, 'Hey Member.');
 });

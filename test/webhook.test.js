@@ -6,7 +6,7 @@ const { once } = require('node:events');
 process.env.DENO_DEPLOY = 'true';
 process.env.CHANNEL_SECRET = 'local-test-secret';
 process.env.CHANNEL_ACCESS_TOKEN = 'local-test-token';
-process.env.BOT_OWNER_IDS = '';
+process.env.BOT_OWNER_IDS = 'U' + '1'.repeat(32);
 process.env.GROUP_ADMIN_IDS = '{}';
 const { app } = require('../index');
 const httpFetch = global.fetch;
@@ -19,6 +19,9 @@ before(async () => {
   await once(server, 'listening');
   base = `http://127.0.0.1:${server.address().port}`;
   global.fetch = async (url, options) => {
+    if (url === 'https://api.line.me/v2/bot/profile/' + process.env.BOT_OWNER_IDS) {
+      return { ok: true, json: async () => ({ displayName: 'Mariam' }) };
+    }
     assert.equal(url, 'https://api.line.me/v2/bot/message/reply');
     assert.equal(options.headers.Authorization, 'Bearer local-test-token');
     return reply(JSON.parse(options.body));
@@ -101,4 +104,19 @@ test('finishes a LINE alert before acknowledging the webhook', async () => {
     release();
   }
   assert.equal((await pending).status, 200);
+});
+
+test('signed owner dot is serialized as a Flex message, not a text object', async () => {
+  let sent = false;
+  reply = async payload => {
+    sent = true;
+    assert.equal(payload.messages.length, 1);
+    assert.equal(payload.messages[0].type, 'flex');
+    assert.equal(payload.messages[0].altText, 'Hey Mariam. Avi is active.');
+    assert.equal(payload.messages[0].contents.body.background.type, 'linearGradient');
+    return { ok: true };
+  };
+  const body = JSON.stringify({ events: [{ type: 'message', replyToken: 'dot-reply', source: { type: 'user', userId: process.env.BOT_OWNER_IDS }, message: { type: 'text', text: '.' } }] });
+  assert.equal((await post(body)).status, 200);
+  assert.equal(sent, true);
 });
