@@ -15,30 +15,19 @@ Only one LINE Official Account can be in a group at a time. See [LINE's group bo
 
 ## 2. Set yourself as bot owner
 
-1. Send `/avi id` to Avi in a private chat. Copy the returned **user ID** (starts with `U`); it is different from your searchable LINE username.
-2. In Deno Deploy > your app > **Settings > Environment Variables**, add `BOT_OWNER_IDS` with that ID. Multiple owners can be separated by commas.
-3. Select **Production and Preview**, save, and redeploy the latest `main` branch. Keep the two channel credentials as Secrets. Owner/admin configuration can also be stored as Secrets.
+The main owner's LINE identity is pinned by its fingerprint in `owner.js`. After deploying this version, that account can send `/avi claim` to confirm access, then `/avi admin` in any group to open the menu. Claim does not give ownership to any other account.
 
-Owners can use bot-admin commands in any group they are in. There is no first-user or first-message claim command: only someone with access to the deployment settings can configure owners.
+Only this main owner can appoint or remove mini admins. Legacy `BOT_OWNER_IDS` and `GROUP_ADMIN_IDS` environment variables are no longer used. Keep the channel token and secret as Secrets.
 
 ## 3. Give someone bot-admin access in one group
 
-1. In that group, you and the trusted person each send `/avi id`.
-2. Copy the **group ID** (starts with `C`) and the trusted person's **user ID** (starts with `U`).
-3. Add `GROUP_ADMIN_IDS` in Deno settings. Its value is a JSON object mapping each group to its bot admins. For example, replace these dummy IDs with the actual IDs:
+Connect Deno KV using the storage instructions below first. Then the main owner sends these commands inside the relevant group:
 
-```json
-{
-  "Caaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": [
-    "U22222222222222222222222222222222",
-    "U33333333333333333333333333333333"
-  ]
-}
-```
+- `/avi admin add @person` grants mini-admin access. Type `@` and select the person from LINE's member picker.
+- `/avi admin remove @person` revokes that person's access in this group.
+- `/avi admins` lists this group's mini-admin IDs.
 
-4. Select **Production and Preview**, save and redeploy. To revoke access, remove that person's ID, save and redeploy. To add another group, add another group-ID entry.
-
-These users can warn/reset in that group only. They cannot appoint more bot admins. The deployment owner manages assignments, which persist across app restarts because they are configuration.
+Mini admins can use the admin menu, Seen controls, warnings and other moderation commands in their assigned group only. They cannot appoint or remove admins, including themselves. The main owner's access cannot be removed through a chat command. Assignments persist in Deno KV across restarts and remain until explicitly revoked, including if someone leaves and rejoins.
 
 ## 4. Commands
 
@@ -59,7 +48,7 @@ The card gradient runs from light violet at lower opacity to deeper violet at hi
 1. In your Deno organization, open **Databases > Provision Database**. Choose **Deno KV**, name it `avi-seen`, and save.
 2. **Assign** the database to the `bots-63` app and wait until it is connected.
 3. In the app's environment variables, set `SEEN_STORAGE` to `deno-kv` for **Production and Preview**. This value may be Plain Text. Save and redeploy.
-4. Your `BOT_OWNER_IDS` / `GROUP_ADMIN_IDS` configuration still controls who can open the menu and change Seen Mode. Keep webhooks enabled and LINE auto-response messages disabled while using Avi.
+4. The same database saves mini-admin assignments. Keep webhooks enabled and LINE auto-response messages disabled while using Avi. Main-owner recognition works without the database, but assigning mini admins and Seen Mode require it.
 
 Shared storage keeps the ON/OFF state and greeted-user IDs across Deno restarts and instances. When storage is missing, Seen Mode stays unavailable and provides setup instructions; ordinary protection and admin greetings continue to work. Normal Node development uses temporary memory for Seen sessions.
 

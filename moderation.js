@@ -1,10 +1,12 @@
 const crypto = require('node:crypto');
 const { createSeenStore, SEEN_SETUP_MESSAGE } = require('./seen-store');
 const { greetingCard, adminCard, seenCard } = require('./cards');
+const { isMainOwner: trustedOwner } = require('./owner');
 
 const HELP = `Avi group protection
 /avi help — commands and limits
 /avi id — your bot user ID and this group ID
+/avi claim — confirm the configured main owner's access
 Bot admins, inside their assigned group:
 /avi admin — AVI ADMIN menu
 . — quick admin greeting (ordinary members get no reply)
@@ -18,25 +20,17 @@ Bot admins, inside their assigned group:
 /avi reset @person — clear warning totals
 Owner, in a private chat with the bot:
 /avi groups — groups recently observed by this instance
+Main owner, inside a group:
+/avi admin add @person — appoint a mini admin for this group
+/avi admin remove @person — revoke mini-admin access
+/avi admins — list mini admins and instructions
 
 Select a real LINE @mention from the member picker.
-Bot admins are configured by the owner in GROUP_ADMIN_IDS.
+Only the main owner can appoint/remove mini admins. Mini admins cannot grant access.
 Warnings/activity are temporary and separate for each group and server instance.
 Avi cannot kick/invite users, change join links, appoint LINE admins, read private chats between others, or show online/read status.`;
 
-function createModeration({ reply, api, env = process.env, now = Date.now, seenStore = createSeenStore({ env }) }) {
-  const owners = new Set((env.BOT_OWNER_IDS || '').split(',').map(id => id.trim()).filter(Boolean));
-  let admins;
-  try {
-    admins = JSON.parse(env.GROUP_ADMIN_IDS || '{}');
-    if (!admins || Array.isArray(admins) || typeof admins !== 'object' ||
-        Object.entries(admins).some(([group, ids]) => !/^C[0-9a-f]{32}$/i.test(group) ||
-          !Array.isArray(ids) || ids.some(id => typeof id !== 'string' || !/^U[0-9a-f]{32}$/i.test(id)))) {
-      throw new Error();
-    }
-  } catch {
-    throw new Error('GROUP_ADMIN_IDS must be a JSON object mapping LINE group IDs to arrays of LINE user IDs.');
-  }
+function createModeration({ reply, api, env = process.env, now = Date.now, seenStore = createSeenStore({ env }), adminStore = seenStore, isMainOwner = trustedOwner }) {
   const words = (env.BLOCKED_WORDS ?? 'badword1,badword2').split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
   const domains = (env.BLOCKED_DOMAINS ?? 'scam.com,badsite.com').split(',').map(x => x.trim().toLowerCase().replace(/\.$/, '')).filter(Boolean);
   const groups = new Map();
@@ -115,7 +109,12 @@ function createModeration({ reply, api, env = process.env, now = Date.now, seenS
     user.lastObserved = timestamp;
     if (event.message?.type !== 'text' || typeof event.message.text !== 'string') return;
     const text = event.message.text;
-    const authorized = owners.has(userId) || Boolean(group && Object.hasOwn(admins, groupId) && admins[groupId].includes(userId));
+    const mainOwner = isMainOwner(userId);
+    const authorized = async () => {
+      if (mainOwner) return true;
+      if (!group) return false;
+      try { return await adminStore.isAdmin(groupId, userId); } catch { return false; }
+    };
     const allowCommand = () => {
       user.commandTimes = (user.commandTimes || []).filter(time => timestamp - time < 10000);
       if (user.commandTimes.length >= 6) return false;
@@ -129,7 +128,7 @@ function createModeration({ reply, api, env = process.env, now = Date.now, seenS
       } catch { return 'there'; }
     };
     if (text.trim() === '.') {
-      if (!authorized || !allowCommand()) return;
+      if (!allowCommand() || !(await authorized())) return;
       return say(greetingCard(await displayName(), true));
     }
     const command = text.trim().match(/^\/avi(?:\s+(\S+))?(?:\s|$)/i);
@@ -138,15 +137,38 @@ function createModeration({ reply, api, env = process.env, now = Date.now, seenS
       const name = (command[1] || 'help').toLowerCase();
       if (name === 'help') return say(HELP);
       if (name === 'id') return say(`Your user ID: ${userId}${groupId ? `\nGroup ID: ${groupId}` : ''}`);
+      if (name === 'claim') return say(mainOwner ? '🛡 You are Avi\'s main owner in all groups. Use /avi admin in a group. Only you can appoint or remove mini admins.' : 'Only Avi\'s configured main owner can claim owner access. Ask the main owner to appoint you as a mini admin.');
       if (name === 'groups') {
-        if (!owners.has(userId) || event.source.type !== 'user') return say('Only the configured bot owner can use /avi groups in a private chat with Avi.');
+        if (!mainOwner || event.source.type !== 'user') return say('Only the configured bot owner can use /avi groups in a private chat with Avi.');
         const rows = [...groups.entries()].slice(-50).map(([id, g]) => `${g.name || 'Group'} | ${id}\nLast event: ${new Date(g.lastSeen).toISOString()}`);
         return say(`Recently observed groups on this instance (not a full list; clears on restart):\n${rows.join('\n') || 'None observed here yet.'}`);
       }
-      if (!['admin', 'protection', 'status', 'members', 'seen', 'warn', 'warnings', 'reset'].includes(name)) return say('Unknown command. Type /avi help. Invitations, kicks, join-link controls and LINE admin promotion must be handled in LINE; Avi has no API for these actions.');
+      if (!['admins', 'admin', 'protection', 'status', 'members', 'seen', 'warn', 'warnings', 'reset'].includes(name)) return say('Unknown command. Type /avi help. Invitations, kicks, join-link controls and LINE admin promotion must be handled in LINE; Avi has no API for these actions.');
       if (!group) return say('Use this command inside the regular LINE group you want to manage.');
-      if (!authorized) return say('This command requires bot-admin permission for this group. The bot owner configures BOT_OWNER_IDS and GROUP_ADMIN_IDS in Deno settings.');
-      if (name === 'admin') return say(adminCard());
+      const adminAction = text.trim().match(/^\/avi\s+admin\s+(add|remove)(?:\s|$)/i)?.[1]?.toLowerCase();
+      if (adminAction || name === 'admins') {
+        if (!mainOwner) return say('Only the main owner can appoint, remove or list mini admins. Mini admins cannot grant admin access.');
+        try {
+          if (name === 'admins') {
+            const ids = await adminStore.adminIds(groupId);
+            return say(`🛡 Mini admins in this group\n${ids.join('\n') || 'None yet.'}\n\n/avi admin add @person\n/avi admin remove @person\nOnly the main owner can change these roles.`);
+          }
+          const id = target(event);
+          if (!id) return say('Select exactly one person using LINE\'s @mention picker: /avi admin add @person or /avi admin remove @person.');
+          if (isMainOwner(id)) return say('That account is the main owner. Its owner access cannot be changed by a group command.');
+          if (adminAction === 'add') {
+            let profile;
+            try { profile = await api(`/group/${encodeURIComponent(groupId)}/member/${encodeURIComponent(id)}`); }
+            catch { return say('Could not confirm that person is a current group member. No admin permission was changed.'); }
+            const added = await adminStore.grantAdmin(groupId, id);
+            return say(`${added ? '✅ Mini admin appointed' : 'Already a mini admin'}: ${String(profile.displayName || id).slice(0, 100)}\nThey can use Avi controls in this group only. They cannot appoint or remove admins.`);
+          }
+          const removed = await adminStore.revokeAdmin(groupId, id);
+          return say(removed ? '✅ Mini-admin access removed for this group.' : 'That person has no mini-admin access in this group.');
+        } catch { return say('Admin roles need shared storage. Connect Deno KV, set SEEN_STORAGE=deno-kv for Production and Preview, then redeploy. No role change was confirmed.'); }
+      }
+      if (!(await authorized())) return say('This command requires bot-admin permission for this group. Ask the main owner to send /avi admin add @you using LINE\'s mention picker.');
+      if (name === 'admin') return say(adminCard(mainOwner));
       if (name === 'protection') return say('🔐 Protection is active: flood/repetition checks and configured blocked words/domains. Seen Mode is a separate greeting feature; switching it off keeps protection active. Invite/remove members inside LINE.');
       if (name === 'seen' && /^\/avi\s+seen(?:\s+(on|off))?\s*$/i.test(text.trim())) {
         const action = text.trim().split(/\s+/)[2]?.toLowerCase();

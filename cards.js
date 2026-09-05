@@ -23,7 +23,7 @@ function greetingCard(name, admin = false) {
 
 const button = (label, text) => ({ type: 'button', height: 'sm', style: 'secondary', action: { type: 'message', label, text } });
 
-function adminCard() {
+function adminCard(mainOwner = false) {
   return violetCard('AVI ADMIN — Seen Mode, Warnings, Members, Group Status, Protection', [
     { type: 'text', text: '🛡 AVI ADMIN', size: 'xl', weight: 'bold', color: '#2E1065' },
     button('👁 Seen Mode', '/avi seen'),
@@ -31,6 +31,7 @@ function adminCard() {
     button('👥 Members', '/avi members'),
     button('📊 Group Status', '/avi status'),
     button('🔐 Protection', '/avi protection'),
+    ...(mainOwner ? [button('🔑 Mini admins', '/avi admins')] : []),
     { type: 'text', text: 'LINE Membership\nInvite / Remove → Manage inside LINE', size: 'xs', color: '#FFFFFF', wrap: true }
   ]);
 }

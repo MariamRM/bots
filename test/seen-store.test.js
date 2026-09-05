@@ -47,6 +47,21 @@ test('separate instances share active session and atomic greeting claims', async
   assert.equal(await a.claim('g', fresh.id, 'u'), true);
 });
 
+test('mini admins persist across instances with atomic grants and independent Seen state', async () => {
+  const kv = sharedDatabase();
+  const options = { env: { DENO_DEPLOY: 'true', SEEN_STORAGE: 'deno-kv' }, deno: { openKv: async () => kv } };
+  const a = createSeenStore(options), b = createSeenStore(options);
+  await Promise.all([a.grantAdmin('g', 'one'), b.grantAdmin('g', 'two')]);
+  const restarted = createSeenStore(options);
+  assert.deepEqual((await restarted.adminIds('g')).sort(), ['one', 'two']);
+  assert.equal(await restarted.isAdmin('other', 'one'), false);
+  await a.start('g');
+  await a.stop('g');
+  assert.equal(await b.isAdmin('g', 'one'), true);
+  await b.revokeAdmin('g', 'one');
+  assert.equal(await restarted.isAdmin('g', 'one'), false);
+});
+
 test('production refuses a temporary memory fallback', async () => {
   const store = createSeenStore({ env: { DENO_DEPLOY: 'true' } });
   await assert.rejects(store.start('g'), /SEEN_STORAGE=deno-kv/);

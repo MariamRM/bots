@@ -1,4 +1,4 @@
-const { test, before, after } = require('node:test');
+const { test, before, after, mock } = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const { once } = require('node:events');
@@ -8,6 +8,7 @@ process.env.CHANNEL_SECRET = 'local-test-secret';
 process.env.CHANNEL_ACCESS_TOKEN = 'local-test-token';
 process.env.BOT_OWNER_IDS = 'U' + '1'.repeat(32);
 process.env.GROUP_ADMIN_IDS = '{}';
+mock.method(require('../owner'), 'isMainOwner', id => id === process.env.BOT_OWNER_IDS);
 const { app } = require('../index');
 const httpFetch = global.fetch;
 let server;

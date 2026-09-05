@@ -8,12 +8,64 @@ const member = 'U' + '3'.repeat(32);
 const groupA = 'C' + 'a'.repeat(32);
 const groupB = 'C' + 'b'.repeat(32);
 
+test('only main owner delegates group-scoped roles and revocation takes effect', async () => {
+  const f = setup();
+  await f.bot.handle(f.event('/avi claim', owner, groupB));
+  assert.match(f.replies.at(-1), /main owner in all groups/);
+  await f.bot.handle(f.event('/avi admin add @Member', owner, groupA, member));
+  assert.match(f.replies.at(-1), /Mini admin appointed/);
+  await f.bot.handle(f.event('/avi admin', member));
+  assert.equal(f.replies.at(-1).type, 'flex');
+  for (const action of ['add', 'remove']) {
+    await f.bot.handle(f.event('/avi admin ' + action + ' @Admin', member, groupA, admin));
+    assert.match(f.replies.at(-1), /Only the main owner/);
+  }
+  await f.bot.handle(f.event('/avi admin', member, groupB));
+  assert.match(f.replies.at(-1), /requires bot-admin/);
+  await f.bot.handle(f.event('/avi admin remove @Member', owner, groupA, member));
+  assert.match(f.replies.at(-1), /access removed/);
+  await f.bot.handle(f.event('/avi admin', member));
+  assert.match(f.replies.at(-1), /requires bot-admin/);
+});
+
+test('grants require real mentions and membership; owner cannot be demoted', async () => {
+  const f = setup();
+  await f.bot.handle(f.event('/avi admin add Member', owner));
+  assert.match(f.replies.at(-1), /exactly one person/);
+  await f.bot.handle(f.event('/avi admin remove @Owner', owner, groupA, owner));
+  assert.match(f.replies.at(-1), /cannot be changed/);
+  f.failApi();
+  await f.bot.handle(f.event('/avi admin add @Member', owner, groupA, member));
+  assert.match(f.replies.at(-1), /No admin permission was changed/);
+  await f.bot.handle(f.event('/avi admin', member));
+  assert.match(f.replies.at(-1), /requires bot-admin/);
+});
+
+test('unavailable role storage never grants access', async () => {
+  const f = setup({ adminStore: {
+    async isAdmin() { throw new Error('offline'); },
+    async grantAdmin() { throw new Error('offline'); }
+  } });
+  await f.bot.handle(f.event('/avi admin add @Member', owner, groupA, member));
+  assert.match(f.replies.at(-1), /No role change was confirmed/);
+  await f.bot.handle(f.event('/avi admin', member));
+  assert.match(f.replies.at(-1), /requires bot-admin/);
+});
+
 function setup(options = {}) {
   const replies = [];
   const calls = [];
   let time = 1700000000000;
   let apiFails = false;
+  const roles = new Map([[groupA, new Set([admin])]]);
   const bot = createModeration({
+    isMainOwner: id => id === owner,
+    adminStore: {
+      async isAdmin(g, u) { return roles.get(g)?.has(u) || false; },
+      async adminIds(g) { return [...(roles.get(g) || [])]; },
+      async grantAdmin(g, u) { if (!roles.has(g)) roles.set(g, new Set()); const ids = roles.get(g); const added = !ids.has(u); ids.add(u); return added; },
+      async revokeAdmin(g, u) { return roles.get(g)?.delete(u) || false; }
+    },
     ...options,
     env: { BOT_OWNER_IDS: owner, GROUP_ADMIN_IDS: JSON.stringify({ [groupA]: [admin] }) },
     now: () => time,
@@ -161,9 +213,12 @@ test('status uses LINE summary and count; API failures return a useful message',
   assert.match(f.replies.at(-1), /information is unavailable/);
 });
 
-test('malformed admin configuration fails closed without exposing its value', () => {
-  assert.throws(() => createModeration({ env: { GROUP_ADMIN_IDS: 'not-json' } }), /GROUP_ADMIN_IDS must be/);
-  assert.throws(() => createModeration({ env: { GROUP_ADMIN_IDS: JSON.stringify({ [groupA]: admin }) } }), /GROUP_ADMIN_IDS must be/);
+test('legacy owner environment cannot grant ownership', async () => {
+  const f = setup({ isMainOwner: () => false });
+  await f.bot.handle(f.event('/avi claim', owner));
+  assert.match(f.replies.at(-1), /Only Avi/);
+  await f.bot.handle(f.event('/avi admin add @Member', owner, groupA, member));
+  assert.match(f.replies.at(-1), /Only the main owner/);
 });
 
 test('old activity expires after 24 hours', async () => {

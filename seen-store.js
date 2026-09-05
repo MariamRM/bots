@@ -11,21 +11,22 @@ function createSeenStore({ env = process.env, deno = globalThis.Deno } = {}) {
     return connection;
   }
   const persistent = env.DENO_DEPLOY === 'true' || env.SEEN_STORAGE === 'deno-kv';
-  async function read(groupId) {
-    const key = ['avi', 'seen', groupId];
+  async function read(groupId, kind = 'seen') {
+    const key = ['avi', kind, groupId];
     if (persistent) return (await database()).get(key);
-    return { key, value: records.get(groupId)?.value || null, versionstamp: records.get(groupId)?.versionstamp || null };
+    const entry = records.get(JSON.stringify(key));
+    return { key, value: entry?.value || null, versionstamp: entry?.versionstamp || null };
   }
   async function write(entry, value) {
     if (persistent) return (await (await database()).atomic().check(entry).set(entry.key, value).commit()).ok;
-    const groupId = entry.key[2];
-    if ((records.get(groupId)?.versionstamp || null) !== entry.versionstamp) return false;
-    records.set(groupId, { value, versionstamp: randomUUID() });
+    const key = JSON.stringify(entry.key);
+    if ((records.get(key)?.versionstamp || null) !== entry.versionstamp) return false;
+    records.set(key, { value, versionstamp: randomUUID() });
     return true;
   }
-  async function update(groupId, change) {
+  async function update(groupId, change, kind = 'seen') {
     for (let attempt = 0; attempt < 12; attempt++) {
-      const entry = await read(groupId);
+      const entry = await read(groupId, kind);
       const result = change(entry.value);
       if (!result.next) return result.result;
       if (await write(entry, result.next)) return result.result;
@@ -33,6 +34,22 @@ function createSeenStore({ env = process.env, deno = globalThis.Deno } = {}) {
     throw new Error('Seen Mode is busy. Please try again.');
   }
   return {
+    async adminIds(groupId) { return (await read(groupId, 'mini-admins')).value?.ids || []; },
+    async isAdmin(groupId, userId) { return ((await read(groupId, 'mini-admins')).value?.ids || []).includes(userId); },
+    grantAdmin(groupId, userId) {
+      return update(groupId, value => {
+        const ids = value?.ids || [];
+        if (ids.includes(userId)) return { result: false };
+        if (ids.length >= 500) throw new Error('Too many mini admins in this group.');
+        return { next: { ids: [...ids, userId] }, result: true };
+      }, 'mini-admins');
+    },
+    revokeAdmin(groupId, userId) {
+      return update(groupId, value => {
+        const ids = value?.ids || [];
+        return { next: { ids: ids.filter(id => id !== userId) }, result: ids.includes(userId) };
+      }, 'mini-admins');
+    },
     async get(groupId) { return (await read(groupId)).value; },
     start(groupId) {
       return update(groupId, value => value?.active ? { result: false } : {
