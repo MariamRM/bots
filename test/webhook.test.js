@@ -6,6 +6,8 @@ const { once } = require('node:events');
 process.env.DENO_DEPLOY = 'true';
 process.env.CHANNEL_SECRET = 'local-test-secret';
 process.env.CHANNEL_ACCESS_TOKEN = 'local-test-token';
+process.env.BOT_OWNER_IDS = '';
+process.env.GROUP_ADMIN_IDS = '{}';
 const { app } = require('../index');
 const httpFetch = global.fetch;
 let server;
@@ -86,7 +88,7 @@ test('finishes a LINE alert before acknowledging the webhook', async () => {
   };
   const body = JSON.stringify({ events: [{
     type: 'message', replyToken: 'test-reply',
-    source: { userId: 'test-user' },
+    source: { type: 'user', userId: 'test-user' },
     message: { type: 'text', text: 'badword1' }
   }] });
   let acknowledged = false;

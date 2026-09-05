@@ -17,20 +17,18 @@ for (const [name, value] of Object.entries({ CHANNEL_ACCESS_TOKEN, CHANNEL_SECRE
   }
 }
 
-// نخزن نشاط المستخدمين مؤقتًا
-const users = new Map();
+const { createModeration } = require('./moderation');
+const moderation = createModeration({ reply: replyMessage, api: lineApi });
 
-const blockedWords = [
-  "badword1",
-  "badword2"
-];
+async function lineApi(path) {
+  const response = await fetch('https://api.line.me/v2/bot' + path, {
+    headers: { Authorization: 'Bearer ' + CHANNEL_ACCESS_TOKEN },
+    signal: AbortSignal.timeout(10000)
+  });
+  if (!response.ok) throw new Error('LINE API request failed: ' + response.status);
+  return response.json();
+}
 
-const blockedDomains = [
-  "scam.com",
-  "badsite.com"
-];
-
-// مهم: نحتاج raw body عشان نتحقق من توقيع LINE
 app.post(
   "/webhook",
   express.raw({ type: "application/json" }),
@@ -60,7 +58,7 @@ app.post(
       if (!body || !Array.isArray(body.events)) return res.sendStatus(400);
 
       // Complete replies before ending the request in a serverless runtime.
-      const results = await Promise.allSettled(body.events.map(handleEvent));
+      const results = await Promise.allSettled(body.events.map(event => moderation.handle(event)));
       for (const result of results) {
         if (result.status === "rejected") console.error("LINE event processing failed");
       }
@@ -75,106 +73,6 @@ app.post(
 app.get("/", (req, res) => {
   res.send("Avi Protection Bot is running ✅");
 });
-
-async function handleEvent(event) {
-  if (event?.type !== "message") return;
-  if (event.message?.type !== "text") return;
-  if (typeof event.message.text !== "string") return;
-
-  const text = event.message.text;
-  const userId = event.source?.userId;
-
-  if (!userId) return;
-
-  const now = Date.now();
-
-  let user = users.get(userId);
-
-  if (!user) {
-    user = {
-      messages: [],
-      warnings: 0,
-      riskScore: 0
-    };
-  }
-
-  user.messages.push({
-    text,
-    time: now
-  });
-
-  // نخلي فقط الرسائل بآخر 10 ثواني
-  user.messages = user.messages.filter(
-    message => now - message.time <= 10000
-  );
-
-  let reason = null;
-  let points = 0;
-
-  // Flood
-  if (user.messages.length >= 6) {
-    reason = "Flood detected";
-    points += 3;
-  }
-
-  // نفس الرسالة مكررة
-  const duplicateCount = user.messages.filter(
-    message => message.text === text
-  ).length;
-
-  if (duplicateCount >= 4) {
-    reason = "Repeated spam";
-    points += 3;
-  }
-
-  // كلمات ممنوعة
-  const lowerText = text.toLowerCase();
-
-  for (const word of blockedWords) {
-    if (lowerText.includes(word.toLowerCase())) {
-      reason = "Blocked word";
-      points += 2;
-    }
-  }
-
-  // روابط
-  const links = text.match(/https?:\/\/[^\s]+/gi) || [];
-
-  for (const link of links) {
-    for (const domain of blockedDomains) {
-      if (link.toLowerCase().includes(domain.toLowerCase())) {
-        reason = "Suspicious link";
-        points += 5;
-      }
-    }
-  }
-
-  if (!reason) {
-    users.set(userId, user);
-    return;
-  }
-
-  user.warnings++;
-  user.riskScore += points;
-
-  users.set(userId, user);
-
-  await replyMessage(
-    event.replyToken,
-    `⚠️ Avi Protection Alert
-
-Reason: ${reason}
-Warnings: ${user.warnings}
-Risk Score: ${user.riskScore}`
-  );
-
-  console.log({
-    userId,
-    reason,
-    warnings: user.warnings,
-    riskScore: user.riskScore
-  });
-}
 
 async function replyMessage(replyToken, text) {
   const response = await fetch(

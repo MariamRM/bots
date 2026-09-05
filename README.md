@@ -1,5 +1,7 @@
 # Avi Protection Bot
 
+For group setup, bot-admin permissions, commands and LINE membership controls, read [GROUP_GUIDE.md](GROUP_GUIDE.md).
+
 بوت LINE يرصد كثرة الرسائل والتكرار والكلمات والروابط المحددة في `index.js`، ويرسل تحذيرًا.
 
 ## التشغيل المحلي
@@ -22,7 +24,7 @@ npm test
 1. ارفع المستودع إلى GitHub بعد التأكد أن `.env` و`node_modules` غير متتبّعين.
 2. افتح https://console.deno.com/ وأنشئ تطبيقًا مرتبطًا بالمستودع وفرع `main`، واجعل مجلد التطبيق جذر المستودع.
 3. يحدد `deno.json` تثبيت المكتبات بـ`npm ci` وتشغيل `index.js` كخادم ديناميكي. لا توجد خطوة بناء.
-4. قبل النشر، أضف `CHANNEL_ACCESS_TOKEN` و`CHANNEL_SECRET` كـSecrets في Environment Variables لسياقي Production وDevelopment، لأن المعاينة تُشغَّل أثناء النشر. لا تضفهما لسياق Build.
+4. قبل النشر، أضف `CHANNEL_ACCESS_TOKEN` و`CHANNEL_SECRET` كـSecrets في Environment Variables لسياقي Production وPreview، لأن المعاينة تُشغَّل أثناء النشر. لا تضفهما لسياق Build.
 5. انشر التطبيق وافتح رابط HTTPS الناتج، ثم استخدم الرابط مع `/webhook` في إعدادات LINE واضغط Verify وفعّل Use webhook.
 
 إعدادات النشر: https://docs.deno.com/deploy/reference/builds/
@@ -33,5 +35,5 @@ npm test
 
 - الكلمات والنطاقات المحظورة في الكود أمثلة؛ عدّلها حسب احتياجك.
 - التحذيرات ونقاط الخطورة وسجل الرسائل محفوظة في ذاكرة نسخة واحدة فقط. تضيع عند إعادة تشغيل التطبيق، ولا تتشارك بين النسخ؛ يلزم تخزين مشترك ودائم لضمان تتبع متسق على الاستضافة التي توسّع عدد النسخ تلقائيًا.
-- تُسجّل أخطاء إرسال التحذيرات دون إعادة محاولة تلقائية. النسخة الحالية لا تمنع معالجة حدث أعادت LINE إرساله.
+- تُسجّل أخطاء إرسال التحذيرات دون إعادة محاولة تلقائية. منع تكرار الأحداث مؤقت داخل نسخة الخادم نفسها فقط.
 - تحقق من حدود الخطة المجانية الحالية على https://deno.com/deploy/pricing قبل النشر.
