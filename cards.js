@@ -37,11 +37,12 @@ function adminCard(mainOwner = false) {
 }
 
 function seenCard(active) {
-  return violetCard(`Seen Mode: ${active ? 'ON' : 'OFF'}`, [
-    { type: 'text', text: `👁 Seen Mode: ${active ? 'ON' : 'OFF'}`, size: 'lg', weight: 'bold', color: '#2E1065' },
-    { type: 'text', text: 'One greeting per person who writes during this session. This does not show LINE read receipts.', size: 'sm', color: '#2E1065', wrap: true },
-    button('Turn ON', '/avi seen on'),
-    button('Turn OFF', '/avi seen off')
+  return violetCard('Reader connection required', [
+    { type: 'text', text: '👁 Reader Mode', size: 'lg', weight: 'bold', color: '#2E1065' },
+    { type: 'text', text: 'Requires the separate logged-in reader account. Writing a message does not count as reading.', size: 'sm', color: '#2E1065', wrap: true },
+    button('Turn ON', '/reader on'),
+    button('Turn OFF', '/reader off'),
+    button('Readers', '/reader list')
   ]);
 }
 

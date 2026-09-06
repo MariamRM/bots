@@ -265,105 +265,35 @@ test('only authorized group admins can change Seen Mode or open the admin menu',
   assert.match(f.replies.at(-1), /inside the regular LINE group/);
 });
 
-test('Seen ON cannot restart an active session, OFF followed by ON starts a fresh list', async () => {
+test('Official Account rejects reader activation and never greets message senders', async () => {
   const f = setup();
-  await f.bot.handle(f.event('hello'));
-  assert.equal(f.replies.length, 0);
   await f.bot.handle(f.event('/avi seen on', admin));
-  assert.match(f.replies.at(-1), /Seen Mode enabled/);
-  await f.bot.handle(f.event('first greeting'));
-  assert.equal(f.replies.at(-1).altText, 'Hey Member.');
-  await f.bot.handle(f.event('/avi seen on', admin));
-  assert.match(f.replies.at(-1), /already active/);
+  assert.match(f.replies.at(-1), /Reader detection is not connected/);
   const count = f.replies.length;
-  await f.bot.handle(f.event('second text'));
-  assert.equal(f.replies.length, count);
-  await f.bot.handle(f.event('/avi seen off', admin));
-  assert.match(f.replies.at(-1), /Seen Mode disabled/);
-  await f.bot.handle(f.event('third text'));
-  assert.equal(f.replies.length, count + 1);
-  await f.bot.handle(f.event('/avi seen on', admin));
-  f.tick(10001);
-  await f.bot.handle(f.event('new session greeting'));
-  assert.equal(f.replies.at(-1).altText, 'Hey Member.');
-});
-
-test('Seen confirmation is short and the opener is greeted on their next message once', async () => {
-  const f = setup();
-  await f.bot.handle(f.event('/avi seen on', owner));
-  assert.equal(f.replies.at(-1), '🟢 Seen Mode enabled');
+  await f.bot.handle(f.event('hello', member));
   await f.bot.handle(f.event('hello', owner));
-  assert.equal(f.replies.at(-1).type, 'flex');
-  const count = f.replies.length;
-  await f.bot.handle(f.event('hello again', owner));
+  await f.bot.handle(f.event('hello', admin));
   assert.equal(f.replies.length, count);
 });
 
-test('each user is greeted once per group; messages in another group stay silent', async () => {
-  const f = setup();
-  await f.bot.handle(f.event('/avi seen on', admin));
-  await f.bot.handle(f.event('one', member, groupB));
-  assert.equal(f.replies.length, 1);
-  await f.bot.handle(f.event('two'));
-  await f.bot.handle(f.event('three', owner));
-  await f.bot.handle(f.event('four'));
-  assert.equal(f.replies.filter(message => message.type === 'flex').length, 2);
-});
-
-test('simultaneous messages from the same user produce only one greeting', async () => {
-  const f = setup();
-  await f.bot.handle(f.event('/avi seen on', admin));
-  await Promise.all([f.bot.handle(f.event('one')), f.bot.handle(f.event('two'))]);
-  assert.equal(f.replies.filter(message => message.type === 'flex').length, 1);
-});
-
-test('Seen Mode does not suppress moderation and combines messages into one reply', async () => {
-  const f = setup();
-  await f.bot.handle(f.event('/avi seen on', admin));
-  await f.bot.handle(f.event('badword1'));
-  assert.equal(f.replies.length, 2);
-  assert.equal(f.replies[1].length, 2);
-  assert.match(f.replies[1][0].text, /Blocked word/);
-  assert.equal(f.replies[1][1].type, 'flex');
-});
-
-test('unavailable Seen storage fails closed but normal protection still works', async () => {
-  const fail = async () => { throw new Error('offline'); };
-  const f = setup({ seenStore: { get: fail, start: fail, stop: fail } });
-  await f.bot.handle(f.event('/avi seen on', admin));
-  assert.match(f.replies.at(-1), /needs shared storage/);
+test('old active greeting sessions cannot greet writers after migration', async () => {
+  const { createSeenStore } = require('../seen-store');
+  const store = createSeenStore({ env: {} });
+  await store.start(groupA);
+  const f = setup({ seenStore: store });
   await f.bot.handle(f.event('ordinary message'));
-  assert.equal(f.replies.length, 1);
+  assert.equal(f.replies.length, 0);
   await f.bot.handle(f.event('badword1'));
+  assert.equal(typeof f.replies.at(-1), 'string');
   assert.match(f.replies.at(-1), /Blocked word/);
 });
 
-test('profile failures use a short greeting without exposing IDs', async () => {
+test('admin greeting still works and reader menu explains companion commands', async () => {
   const f = setup();
-  await f.bot.handle(f.event('/avi seen on', admin));
-  f.failApi();
-  await f.bot.handle(f.event('hello'));
-  assert.equal(f.replies.at(-1).altText, 'Hey there.');
-});
-
-test('admin menu and Seen controls send actionable Flex cards', async () => {
-  const f = setup();
-  await f.bot.handle(f.event('/avi admin', admin));
+  await f.bot.handle(f.event('.', owner));
   assert.equal(f.replies.at(-1).type, 'flex');
-  const actions = f.replies.at(-1).contents.body.contents.filter(item => item.type === 'button').map(item => item.action.text);
-  assert.deepEqual(actions, ['/avi seen', '/avi warnings', '/avi members', '/avi status', '/avi protection']);
   await f.bot.handle(f.event('/avi seen', admin));
-  assert.equal(f.replies.at(-1).altText, 'Seen Mode: OFF');
-  await f.bot.handle(f.event('/avi warnings', admin));
-  assert.match(f.replies.at(-1), /view totals/);
-});
-
-test('membership joins do not trigger Seen greetings', async () => {
-  const f = setup();
-  await f.bot.handle(f.event('/avi seen on', admin));
-  f.replies.length = 0;
-  await f.bot.handle({ type: 'memberJoined', source: { type: 'group', groupId: groupA }, joined: { members: [{ userId: member }] }, replyToken: 'fake' });
-  assert.equal(f.replies.length, 0);
-  await f.bot.handle(f.event('hello'));
-  assert.equal(f.replies.at(-1).altText, 'Hey Member.');
+  assert.equal(f.replies.at(-1).altText, 'Reader connection required');
+  const actions = f.replies.at(-1).contents.body.contents.filter(x => x.type === 'button').map(x => x.action.text);
+  assert.deepEqual(actions, ['/reader on', '/reader off', '/reader list']);
 });

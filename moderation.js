@@ -174,14 +174,13 @@ function createModeration({ reply, api, env = process.env, now = Date.now, seenS
         const action = text.trim().split(/\s+/)[2]?.toLowerCase();
         try {
           if (action === 'on') {
-            const started = await seenStore.start(groupId);
-            return say(started ? '🟢 Seen Mode enabled' : '⚠️ Seen Mode is already active.\n\nClose it first:\n/avi seen off');
+            return say('Reader detection is not connected to this Official Account. Use /reader on with the logged-in reader account. Writing messages no longer triggers Seen greetings.');
           }
           if (action === 'off') {
             await seenStore.stop(groupId);
             return say('🔴 Seen Mode disabled');
           }
-          return say(seenCard(Boolean((await seenStore.get(groupId))?.active)));
+          return say(seenCard());
         } catch { return say(SEEN_SETUP_MESSAGE); }
       }
       if (name === 'warnings' && /^\/avi\s+warnings\s*$/i.test(text.trim())) return say('⚠️ Warnings\n/avi warn @person — record a warning\n/avi warnings @person — view totals\n/avi reset @person — clear totals\nSelect a real LINE @mention.');
@@ -236,21 +235,7 @@ function createModeration({ reply, api, env = process.env, now = Date.now, seenS
     });
     if (suspicious) { reasons.push('Suspicious link'); points += 5; }
     const announce = async alert => {
-      let card;
-      if (group && event.replyToken) {
-        try {
-          const session = await seenStore.get(groupId);
-          if (session?.active && !session.greeted.includes(userId)) {
-            const name = await displayName();
-            if (await seenStore.claim(groupId, session.id, userId)) {
-              const current = await seenStore.get(groupId);
-              if (current?.active && current.id === session.id) card = greetingCard(name);
-            }
-          }
-        } catch { /* Seen storage failures must not interrupt protection or cause repeated replies. */ }
-      }
-      if (alert && card) return say([{ type: 'text', text: alert }, card]);
-      if (alert || card) return say(alert || card);
+      if (alert) return say(alert);
     };
     if (!reasons.length) return announce();
     user.warnings++;

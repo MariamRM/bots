@@ -1,0 +1,13 @@
+{
+  "name": "avi-reader-experiment",
+  "private": true,
+  "scripts": {
+    "start": "deno run --config deno.json --allow-net --allow-env --allow-read probe.ts"
+  },
+  "devDependencies": {
+    "deno": "2.9.6"
+  },
+  "dependencies": {
+    "avi-protection-bot": "file:../.."
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "nodeModulesDir": "auto",
+  "imports": {
+    "@evex/linejs": "jsr:@evex/linejs@3.3.2",
+    "qrcode": "npm:qrcode@1.5.4"
+  }
+}
