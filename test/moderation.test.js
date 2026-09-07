@@ -265,10 +265,13 @@ test('only authorized group admins can change Seen Mode or open the admin menu',
   assert.match(f.replies.at(-1), /inside the regular LINE group/);
 });
 
-test('Official Account rejects reader activation and never greets message senders', async () => {
+test('Official Account delegates reader controls without false confirmations or writer greetings', async () => {
   const f = setup();
   await f.bot.handle(f.event('/avi seen on', admin));
-  assert.match(f.replies.at(-1), /Reader detection needs the local reader bridge/);
+  await f.bot.handle(f.event('/avi seen off', admin));
+  await f.bot.handle(f.event('/avi seen list', admin));
+  await f.bot.handle(f.event('/avi seen status', admin));
+  assert.equal(f.replies.length, 0);
   const count = f.replies.length;
   await f.bot.handle(f.event('hello', member));
   await f.bot.handle(f.event('hello', owner));
@@ -295,5 +298,5 @@ test('admin greeting still works and reader menu explains companion commands', a
   await f.bot.handle(f.event('/avi seen', admin));
   assert.equal(f.replies.at(-1).altText, 'Reader connection required');
   const actions = f.replies.at(-1).contents.body.contents.filter(x => x.type === 'button').map(x => x.action.text);
-  assert.deepEqual(actions, ['/reader on', '/reader off', '/reader list']);
+  assert.deepEqual(actions, ['/avi seen on', '/avi seen off', '/avi seen list']);
 });

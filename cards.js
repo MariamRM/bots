@@ -40,9 +40,9 @@ function seenCard(active) {
   return violetCard('Reader connection required', [
     { type: 'text', text: '👁 Reader Mode', size: 'lg', weight: 'bold', color: '#2E1065' },
     { type: 'text', text: 'Requires the separate logged-in reader account. Writing a message does not count as reading.', size: 'sm', color: '#2E1065', wrap: true },
-    button('Turn ON', '/reader on'),
-    button('Turn OFF', '/reader off'),
-    button('Readers', '/reader list')
+    button('Turn ON', '/avi seen on'),
+    button('Turn OFF', '/avi seen off'),
+    button('Readers', '/avi seen list')
   ]);
 }
 

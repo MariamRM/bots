@@ -24,7 +24,7 @@ const readerLink = createReaderLink();
 
 app.post('/reader/resolve', express.raw({ type: 'application/json', limit: '2kb' }), async (req, res) => {
   res.set('Cache-Control', 'no-store');
-  res.set('X-Avi-Reader-Version', '2');
+  res.set('X-Avi-Reader-Version', '3');
   if (!validRequest(req.body, req.headers['x-avi-reader-time'], req.headers['x-avi-reader-signature'], CHANNEL_ACCESS_TOKEN)) return res.sendStatus(401);
   let id, input;
   try { input = JSON.parse(req.body.toString()); id = input.messageId; } catch { return res.sendStatus(400); }

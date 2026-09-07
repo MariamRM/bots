@@ -24,12 +24,12 @@ function createReaderLink({ deno = globalThis.Deno, env = process.env, now = Dat
     async observe(event) {
       // Only explicit reader commands are indexed. Never store conversation text.
       if (event?.type !== 'message' || event.source?.type !== 'group' || event.message?.type !== 'text' ||
-          !/^\/reader\s+(on|off|status|list|link)(?:\s|$)/i.test(event.message.text || '') ||
+          !/^(?:\/reader|\/avi\s+seen)\s+(on|off|status|list|link)(?:\s|$)/i.test(event.message.text || '') ||
           !/^\d{1,30}$/.test(event.message.id || '') || !event.source.userId) return;
       const value = {
         messageId: event.message.id, groupId: event.source.groupId, userId: event.source.userId,
         timestamp: Number(event.timestamp), commandHash: createHash('sha256').update(event.message.text).digest('hex'),
-        action: event.message.text.trim().split(/\s+/)[1].toLowerCase(),
+        action: event.message.text.match(/^(?:\/reader|\/avi\s+seen)\s+(on|off|status|list|link)(?:\s|$)/i)[1].toLowerCase(),
         mentions: (event.message.mention?.mentionees || []).filter(m => m.type === 'user' && m.userId)
           .slice(0, 20).map(m => ({ index: m.index, length: m.length, userId: m.userId })),
         expires: now() + TTL

@@ -10,6 +10,18 @@ async function setup() {
   return { mode, sent, command, read };
 }
 
+test('Avi chat commands require admin authorization and control the same reader session', async () => {
+  const f = await setup();
+  await f.command('/avi seen on', 'stranger'); assert.equal(f.sent.length, 0);
+  await f.command('/avi seen on'); assert.equal(f.mode.status.active, true);
+  await f.read();
+  await f.command('/avi seen list'); assert.match(f.sent.at(-1).text, /Readers: 1/);
+  await f.command('/avi seen status'); assert.match(f.sent.at(-1).text, /Reader mode: ON/);
+  await f.command('/avi seen off'); assert.equal(f.mode.status.active, false);
+  const count = f.sent.length;
+  await f.read('another'); assert.equal(f.sent.length, count);
+});
+
 test('read anchor uses the private command ID rather than the unrelated Official Account ID', async () => {
   const { createReaderMode } = await import('../experiments/reader/reader-mode.mjs');
   const sent = [];

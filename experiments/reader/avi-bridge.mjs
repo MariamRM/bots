@@ -63,7 +63,7 @@ export function createAviBridge({ token, baseUrl, request = fetch, now = Date.no
   const status = { linkedUsers: 0, groupLinked: false, lastError: '', sentByAvi: 0, pairCommand: '/reader link ' + pairCode };
   async function observe(message) {
     const version = generation;
-    if (!/^\/reader\s+(on|off|status|list|link)(?:\s|$)/i.test(message.text || '')) return null;
+    if (!/^(?:\/reader|\/avi\s+seen)\s+(on|off|status|list|link)(?:\s|$)/i.test(message.text || '')) return null;
     const pairing = message.text.trim().startsWith('/reader link ' + pairCode + ' ') || message.text.trim() === '/reader link ' + pairCode;
     if (!pairing && !identity.user(message.from)) {
       status.lastError = 'Copy the pairing command from the reader page, add a real @mention, and send it as your Avi admin.';

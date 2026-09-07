@@ -74,7 +74,7 @@ async function login() {
                 const observation = await bridge.observe(message);
                 if (observation) {
                   if (observation.action === 'link') {
-                    state.status = `Avi identity links: ${bridge.identity.size}. Now use /reader on and open its message without typing.`;
+                    state.status = `Avi identity links: ${bridge.identity.size}. Now use /avi seen on and open its message without typing.`;
                     if (observation.authorized) await bridge.send({ text: `Linked users: ${bridge.identity.size}` });
                   } else {
                     await readerMode.command({ ...message, authorized: observation.authorized });
@@ -109,7 +109,7 @@ const html = `<!doctype html><html><meta charset="utf-8"><title>Avi reader test<
 <button id="login">Log in with the new account</button><p id="status"></p><p id="account"></p><img id="qr" hidden><p id="pin"></p>
 <select id="groups"><option value="">Select your test group</option></select><br><button id="start">Start reader check</button><button id="stop">Stop check</button>
 <p>After selecting your group, copy this pairing command. Add a real LINE @mention after the code and send it from your Avi admin account.</p><input id="pair" readonly style="width:100%;font:16px monospace;padding:10px"><button id="copy">Copy pairing command</button>
-<ol><li>Log in with the reader account, select a group containing Avi, and press Start reader check.</li><li>Send the pairing command above with <b>@person</b>, selecting a real LINE mention. Repeat with other people you want Avi to mention once per local login. Avi should confirm Linked users.</li><li>Send <b>/reader on</b> as an Avi admin. Avi must reply with Seen Mode enabled.</li><li>Have a linked person open that new message without typing. If their read event arrives, Avi sends <b>Hey @Name</b> once.</li><li>Use <b>/reader list</b>, <b>/reader status</b>, or <b>/reader off</b> as an Avi admin.</li></ol>
+<ol><li>Log in with the reader account, select a group containing Avi, and press Start reader check.</li><li>Send the pairing command above with <b>@person</b>, selecting a real LINE mention. Repeat with other people you want Avi to mention once per local login. Avi should confirm Linked users.</li><li>Send <b>/avi seen on</b> as an Avi admin. Avi must reply with Seen Mode enabled.</li><li>Have a linked person open that new message without typing. If their read event arrives, Avi sends <b>Hey @Name</b> once.</li><li>Use <b>/avi seen list</b>, <b>/avi seen status</b>, or <b>/avi seen off</b> as an Avi admin.</li></ol>
 <p>The logged-in reader account cannot detect its own reads. Other linked accounts, including the admin who enables the mode, are eligible. This bridge is experimental until Avi's greeting is confirmed in a live test.</p>
 <p>No notification means this test has not confirmed reader detection. It does not prove nobody read your message.</p><ul id="reads"></ul><h2>Connection check</h2><pre id="diagnostics"></pre>
 <script>

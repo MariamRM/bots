@@ -24,7 +24,7 @@ export function createReaderMode({ send, profile, now = Date.now, authorize, can
   }
   async function command(message) {
     if (!group || message.to !== group || !(authorize ? await authorize(message) : [owner, self].includes(message.from))) return false;
-    const action = message.text?.trim().match(/^\/reader\s+(on|off|list|status)$/i)?.[1]?.toLowerCase();
+    const action = message.text?.trim().match(/^(?:\/reader|\/avi\s+seen)\s+(on|off|list|status)$/i)?.[1]?.toLowerCase();
     if (!action) return false;
     commands = commands.filter(t => now() - t < 10000);
     if (commands.length >= 5) return true;
@@ -33,7 +33,7 @@ export function createReaderMode({ send, profile, now = Date.now, authorize, can
       generation++; session = undefined; status.active = false; status.readers = 0;
       await send(group, { text: '🔴 Seen Mode disabled' });
     } else if (action === 'on') {
-      if (session) { await send(group, { text: '⚠️ Seen Mode is already active.\n/reader off' }); return true; }
+      if (session) { await send(group, { text: '⚠️ Seen Mode is already active.\n/avi seen off' }); return true; }
       const version = ++generation;
       const started = now();
       const sent = await send(group, { text: '🟢 Seen Mode enabled' });

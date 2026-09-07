@@ -1,5 +1,5 @@
 const crypto = require('node:crypto');
-const { createSeenStore, SEEN_SETUP_MESSAGE } = require('./seen-store');
+const { createSeenStore } = require('./seen-store');
 const { greetingCard, adminCard, seenCard } = require('./cards');
 const { isMainOwner: trustedOwner } = require('./owner');
 
@@ -11,11 +11,11 @@ Bot admins, inside their assigned group:
 /avi admin — AVI ADMIN menu
 . — quick admin greeting (ordinary members get no reply)
 /avi seen — reader setup and controls
-/reader link @person — link a reader for Avi mentions
-/reader on — start reader mode with the local bridge running
-/reader off — stop reader mode
-/reader list — linked readers observed in this session
-/reader status — check reader mode
+/reader link CODE @person — one-time pairing using the code on the reader page
+/avi seen on — start reader mode with the paired reader running
+/avi seen off — stop reader mode
+/avi seen list — linked readers observed in this session
+/avi seen status — check reader mode
 /avi status — group name, member count and monitoring status
 /avi members — recently observed users (not a complete member list)
 /avi seen @person — last event observed by this bot instance
@@ -174,18 +174,12 @@ function createModeration({ reply, api, env = process.env, now = Date.now, seenS
       if (!(await authorized())) return say('This command requires bot-admin permission for this group. Ask the main owner to send /avi admin add @you using LINE\'s mention picker.');
       if (name === 'admin') return say(adminCard(mainOwner));
       if (name === 'protection') return say('🔐 Protection is active: flood/repetition checks and configured blocked words/domains. Seen Mode is a separate greeting feature; switching it off keeps protection active. Invite/remove members inside LINE.');
-      if (name === 'seen' && /^\/avi\s+seen(?:\s+(on|off))?\s*$/i.test(text.trim())) {
+      if (name === 'seen' && /^\/avi\s+seen(?:\s+(on|off|list|status))?\s*$/i.test(text.trim())) {
         const action = text.trim().split(/\s+/)[2]?.toLowerCase();
-        try {
-          if (action === 'on') {
-            return say('Reader detection needs the local reader bridge running. As an Avi admin, use /reader link @person, then /reader on. Writing messages does not trigger Seen greetings.');
-          }
-          if (action === 'off') {
-            await seenStore.stop(groupId);
-            return say('🔴 Seen Mode disabled');
-          }
-          return say(seenCard());
-        } catch { return say(SEEN_SETUP_MESSAGE); }
+        // The paired reader handles these commands and sends through Avi.
+        // Do not falsely confirm a mode change in the webhook before it happens.
+        if (action) return;
+        return say(seenCard());
       }
       if (name === 'warnings' && /^\/avi\s+warnings\s*$/i.test(text.trim())) return say('⚠️ Warnings\n/avi warn @person — record a warning\n/avi warnings @person — view totals\n/avi reset @person — clear totals\nSelect a real LINE @mention.');
       if (name === 'status') {

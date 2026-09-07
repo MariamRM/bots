@@ -35,7 +35,7 @@ Mini admins can use the admin menu, warnings and other moderation commands in th
 
 Automatic greetings triggered by ordinary messages have been removed. The Official Account cannot detect silent readers and `/avi seen` explains the separate reader companion. The explicit owner/admin `.` greeting remains available.
 
-The experimental bridge is in `experiments/reader`. Log in locally with the reader account and select a group containing Avi. From your Avi owner/mini-admin account, send `/reader link @person` using real mentions, then `/reader on`. Avi sends the opening message and greetings with real mentions. `/reader off`, `/reader list`, and `/reader status` use your current Avi admin permissions. Ordinary messages never trigger greetings. The reader account itself cannot be detected as a reader.
+The experimental bridge is in `experiments/reader`. Log in locally with the reader account and select a group containing Avi. From your Avi owner/mini-admin account, send `/reader link @person` using real mentions, then `/avi seen on`. Avi sends the opening message and greetings with real mentions. `/avi seen off`, `/avi seen list`, and `/avi seen status` use your current Avi admin permissions. Ordinary messages never trigger greetings. The reader account itself cannot be detected as a reader.
 
 Read notifications reached the local probe, but the new bridge still needs a live test confirming cross-API identity matching and Avi's actual greeting. It is not represented as LINE-approved. It runs locally while the process stays open; restarting clears sessions, identity links, reader lists and login. See `experiments/reader/README.md` for setup and verification.
 

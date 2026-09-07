@@ -12,16 +12,16 @@ npm start --prefix experiments/reader
 Open the localhost URL, log in with the reader account by QR, select a group containing Avi, and click Start reader check. Send commands from your Avi owner or mini-admin account in that group:
 
 - Copy the `/reader link CODE` command displayed after selecting the group. Add a real `@person` mention to link each reader once per local session. Wait for Avi's `Linked users` confirmation.
-- `/reader on`: Avi sends the opening message and starts a reader session.
-- `/reader off`: stop and clear the list.
-- `/reader list`: show linked readers with up to 20 mentions.
-- `/reader status`: show whether actual read notifications were confirmed.
+- `/avi seen on`: Avi sends the opening message and starts a reader session.
+- `/avi seen off`: stop and clear the list.
+- `/avi seen list`: show linked readers with up to 20 mentions.
+- `/avi seen status`: show whether actual read notifications were confirmed.
 
 Only current Avi owner/mini-admin accounts can control reader mode. Only the main owner can appoint mini admins. Pairing requires a random code from the local page. Commands are matched against Avi's verified webhook by message ID or an exact server timestamp plus SHA-256 of the complete command. Ambiguous matches fail closed. Mentioned users are matched by exact mention positions. Subsequent commands must match the already-linked sender and group. Names and similarities between IDs are never used to guess a match. Unknown readers are counted in local diagnostics without sending incorrect mentions.
 
-Only a fresh NOTIFIED_READ_MESSAGE for the selected group covering the private connection's `/reader on` command ID or newer triggers Hey @Name, once per reader per session, capped at 100 readers. The Official Account's outgoing ID is not compared with private read watermarks. The logged-in account is excluded. Ordinary messages and activation commands never themselves trigger greetings. Repeated ON requires OFF first. Failed greetings remain recorded to prevent repeated sends.
+Only a fresh NOTIFIED_READ_MESSAGE for the selected group covering the private connection's `/avi seen on` command ID or newer triggers Hey @Name, once per reader per session, capped at 100 readers. The Official Account's outgoing ID is not compared with private read watermarks. The logged-in account is excluded. Ordinary messages and activation commands never themselves trigger greetings. Repeated ON requires OFF first. Failed greetings remain recorded to prevent repeated sends.
 
-For verification, keep a linked person outside the group, send `/reader on` as an Avi admin, then have that person open Avi's new message without typing. Check both the local read count and Avi's actual greeting. The logged-in reader account cannot detect its own reads; use the separate mariam account as observer if Jay lu should be greeted. An absent notification is inconclusive, not proof that nobody read a message.
+For verification, keep a linked person outside the group, send `/avi seen on` as an Avi admin, then have that person open Avi's new message without typing. Check both the local read count and Avi's actual greeting. The logged-in reader account cannot detect its own reads; use the separate mariam account as observer if Jay lu should be greeted. An absent notification is inconclusive, not proof that nobody read a message.
 
 The login session, identity links and reader lists stay in memory. Restarting requires QR login and relinking users. Stop with Ctrl+C. The companion must keep running locally; it is not deployed to Deno Deploy. Selected-group messages are inspected for reader commands without retaining conversation text. Diagnostics never expose credentials or message content.
 

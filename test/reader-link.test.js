@@ -98,7 +98,7 @@ test('Avi bridge routes a real read greeting through official push, never a writ
   const mode = createReaderMode({ send: async (g, msg) => bridge.send(msg), profile: async () => 'Name', now: () => 1000,
     authorize: msg => msg.authorized === true, canMention: id => Boolean(bridge.identity.user(id)) });
   mode.configure('private-group', '', 'private-observer');
-  await mode.command({ to: 'private-group', from: 'private-owner', text: '/reader on', authorized: true });
+  await mode.command({ to: 'private-group', from: 'private-owner', text: '/avi seen on', authorized: true });
   assert.equal(calls.length, 2);
   await mode.event({ type: 26, param1: 'private-group', param2: 'private-reader', param3: '201', createdTime: 2000 });
   await mode.event({ type: 55, param1: 'private-group', param2: 'unknown', param3: '201', createdTime: 2000 });
