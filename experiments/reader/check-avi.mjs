@@ -17,7 +17,7 @@ async function check() {
   console.log('LINE mention-object validation:', validation.status);
   if (!validation.ok) throw new Error('Mention validation failed');
   const timestamp = String(Date.now()), body = JSON.stringify({ messageId: '0' });
-  const signature = createHmac('sha256', env.CHANNEL_SECRET).update('avi-reader-link:v1\n' + timestamp + '\n' + body).digest('hex');
+  const signature = createHmac('sha256', env.CHANNEL_ACCESS_TOKEN).update('avi-reader-link:v1\n' + timestamp + '\n' + body).digest('hex');
   const resolver = await fetch('https://bots-63.mariamrm.deno.net/reader/resolve', {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'x-avi-reader-time': timestamp, 'x-avi-reader-signature': signature },
     body, signal: AbortSignal.timeout(15000), redirect: 'error'

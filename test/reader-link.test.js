@@ -54,10 +54,13 @@ test('Avi bridge routes a real read greeting through official push, never a writ
   const { createAviBridge } = await import('../experiments/reader/avi-bridge.mjs');
   const { createReaderMode } = await import('../experiments/reader/reader-mode.mjs');
   const calls = [];
-  const bridge = createAviBridge({ token: 'dummy', secret: 'dummy', baseUrl: 'https://example.test', request: async (url, options) => {
+  const bridge = createAviBridge({ token: 'dummy', baseUrl: 'https://example.test', request: async (url, options) => {
     calls.push({ url, body: JSON.parse(options.body) });
-    if (url.endsWith('/reader/resolve')) return Response.json({ messageId: '123', groupId: group, userId: ownerId, authorized: true,
-      mentions: [{ index: 13, length: 5, userId: reader }] });
+    if (url.endsWith('/reader/resolve')) {
+      assert.equal(validRequest(Buffer.from(options.body), options.headers['x-avi-reader-time'], options.headers['x-avi-reader-signature'], 'dummy'), true);
+      return Response.json({ messageId: '123', groupId: group, userId: ownerId, authorized: true,
+        mentions: [{ index: 13, length: 5, userId: reader }] });
+    }
     return Response.json({ sentMessages: [{ id: '200' }] });
   } });
   await bridge.observe({ id: '123', from: 'private-owner', text: '/reader link @Name', contentMetadata: { MENTION: JSON.stringify({ MENTIONEES: [{ S: '13', E: '18', M: 'private-reader' }] }) } });

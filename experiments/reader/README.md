@@ -1,6 +1,6 @@
 # Experimental Avi reader bridge
 
-A local LINEJS 3.3.2 connection receives private-client read notifications. Avi's Official Account sends greetings through the official push API with textV2 mentions. The read source remains unofficial; this is not a claim of LINE approval or reliable support. The root `.env` must contain Avi's current channel token and secret. Deno Deploy must run the updated webhook with Deno KV attached and `SEEN_STORAGE=deno-kv`.
+A local LINEJS 3.3.2 connection receives private-client read notifications. Avi's Official Account sends greetings through the official push API with textV2 mentions. The read source remains unofficial; this is not a claim of LINE approval or reliable support. The root `.env` must contain the same Avi channel access token as Deno Deploy. Deno Deploy must run the updated webhook with Deno KV attached and `SEEN_STORAGE=deno-kv`. The channel secret is still needed by the official webhook, but not by this local bridge.
 
 From the repository root:
 
@@ -25,7 +25,7 @@ For verification, keep a linked person outside the group, send `/reader on` as a
 
 The login session, identity links and reader lists stay in memory. Restarting requires QR login and relinking users. Stop with Ctrl+C. The companion must keep running locally; it is not deployed to Deno Deploy. Selected-group messages are inspected for reader commands without retaining conversation text. Diagnostics never expose credentials or message content.
 
-Avi indexes only explicit `/reader` commands for ten minutes in Deno KV, storing sender/group IDs and mention positions without text. The read-only resolver requires a timestamped, domain-separated HMAC using the channel secret and rechecks admin roles on every lookup. An unauthorized user cannot establish the group link or link other people; their own `/reader link` can identify only themselves once the group is linked.
+Avi indexes only explicit `/reader` commands for ten minutes in Deno KV, storing sender/group IDs and mention positions without text. The read-only resolver requires a timestamped, domain-separated HMAC using the channel access token and rechecks admin roles on every lookup. An unauthorized user cannot establish the group link or link other people; their own `/reader link` can identify only themselves once the group is linked.
 
 Read notifications from two distinct users reached the previous local probe. The new bridge still needs a live end-to-end test confirming cross-API message IDs, Avi's read watermark, and Avi's actual greeting. Automated checks cover filtering, authenticated identity matching, mentions, authorization, duplicates, and stopping pending greetings. They do not prove live support. `node experiments/reader/check-avi.mjs` validates credentials, mention syntax and the deployed resolver without sending group messages. Official push messages use the account's message allowance.
 

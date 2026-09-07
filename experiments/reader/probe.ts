@@ -7,8 +7,8 @@ import { parse } from 'npm:dotenv@17.4.2';
 
 // Credentials stay in the local process; the browser never receives them.
 const credentials = parse(await Deno.readTextFile(new URL('../../.env', import.meta.url)));
-if (!credentials.CHANNEL_ACCESS_TOKEN || !credentials.CHANNEL_SECRET) throw new Error('Configure the local .env channel credentials first');
-const bridge = createAviBridge({ token: credentials.CHANNEL_ACCESS_TOKEN, secret: credentials.CHANNEL_SECRET,
+if (!credentials.CHANNEL_ACCESS_TOKEN) throw new Error('Configure the local .env channel token first');
+const bridge = createAviBridge({ token: credentials.CHANNEL_ACCESS_TOKEN,
   baseUrl: 'https://bots-63.mariamrm.deno.net' });
 const key = crypto.randomUUID();
 let client: Client | undefined;

@@ -51,7 +51,7 @@ export function officialMessage(message, identity) {
   return { type: 'textV2', text, substitution };
 }
 
-export function createAviBridge({ token, secret, baseUrl, request = fetch, now = Date.now }) {
+export function createAviBridge({ token, baseUrl, request = fetch, now = Date.now }) {
   const identity = createIdentityLink();
   let generation = 0;
   const status = { linkedUsers: 0, groupLinked: false, lastError: '', sentByAvi: 0 };
@@ -62,7 +62,7 @@ export function createAviBridge({ token, secret, baseUrl, request = fetch, now =
     let response;
     for (let attempt = 0; attempt < 4; attempt++) {
       const timestamp = String(now());
-      const signature = createHmac('sha256', secret).update('avi-reader-link:v1\n' + timestamp + '\n' + body).digest('hex');
+      const signature = createHmac('sha256', token).update('avi-reader-link:v1\n' + timestamp + '\n' + body).digest('hex');
       response = await request(baseUrl + '/reader/resolve', {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'x-avi-reader-time': timestamp, 'x-avi-reader-signature': signature },
         body, signal: AbortSignal.timeout(10000), redirect: 'error'
