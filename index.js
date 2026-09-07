@@ -24,13 +24,15 @@ const readerLink = createReaderLink();
 
 app.post('/reader/resolve', express.raw({ type: 'application/json', limit: '2kb' }), async (req, res) => {
   res.set('Cache-Control', 'no-store');
-  res.set('X-Avi-Reader-Version', '1');
+  res.set('X-Avi-Reader-Version', '2');
   if (!validRequest(req.body, req.headers['x-avi-reader-time'], req.headers['x-avi-reader-signature'], CHANNEL_ACCESS_TOKEN)) return res.sendStatus(401);
-  let id;
-  try { id = JSON.parse(req.body.toString()).messageId; } catch { return res.sendStatus(400); }
+  let id, input;
+  try { input = JSON.parse(req.body.toString()); id = input.messageId; } catch { return res.sendStatus(400); }
   if (typeof id !== 'string' || !/^\d{1,30}$/.test(id)) return res.sendStatus(400);
+  const fingerprint = Number.isSafeInteger(input.timestamp) && input.timestamp > 0 && /^[a-f0-9]{64}$/.test(input.commandHash || '')
+    ? { timestamp: input.timestamp, commandHash: input.commandHash } : undefined;
   try {
-    const value = await readerLink.resolve(id);
+    const value = await readerLink.resolve(id, fingerprint);
     return value ? res.json(value) : res.sendStatus(404);
   } catch { return res.sendStatus(503); }
 });

@@ -108,15 +108,17 @@ const html = `<!doctype html><html><meta charset="utf-8"><title>Avi reader test<
 <h1>Avi reader bridge</h1><p>Avi sends greetings from verified read notifications. Keep this local process running.</p>
 <button id="login">Log in with the new account</button><p id="status"></p><p id="account"></p><img id="qr" hidden><p id="pin"></p>
 <select id="groups"><option value="">Select your test group</option></select><br><button id="start">Start reader check</button><button id="stop">Stop check</button>
-<ol><li>Log in with the reader account, select a group containing Avi, and press Start reader check.</li><li>From your Avi owner/admin account, send <b>/reader link @person</b>, selecting a real LINE mention. Link each person you want Avi to mention once per local login.</li><li>Send <b>/reader on</b> as an Avi admin. Avi must reply with Seen Mode enabled.</li><li>Have a linked person open that new message without typing. If their read event arrives, Avi sends <b>Hey @Name</b> once.</li><li>Use <b>/reader list</b>, <b>/reader status</b>, or <b>/reader off</b> as an Avi admin.</li></ol>
+<p>After selecting your group, copy this pairing command. Add a real LINE @mention after the code and send it from your Avi admin account.</p><input id="pair" readonly style="width:100%;font:16px monospace;padding:10px"><button id="copy">Copy pairing command</button>
+<ol><li>Log in with the reader account, select a group containing Avi, and press Start reader check.</li><li>Send the pairing command above with <b>@person</b>, selecting a real LINE mention. Repeat with other people you want Avi to mention once per local login. Avi should confirm Linked users.</li><li>Send <b>/reader on</b> as an Avi admin. Avi must reply with Seen Mode enabled.</li><li>Have a linked person open that new message without typing. If their read event arrives, Avi sends <b>Hey @Name</b> once.</li><li>Use <b>/reader list</b>, <b>/reader status</b>, or <b>/reader off</b> as an Avi admin.</li></ol>
 <p>The logged-in reader account cannot detect its own reads. Other linked accounts, including the admin who enables the mode, are eligible. This bridge is experimental until Avi's greeting is confirmed in a live test.</p>
 <p>No notification means this test has not confirmed reader detection. It does not prove nobody read your message.</p><ul id="reads"></ul><h2>Connection check</h2><pre id="diagnostics"></pre>
 <script>
 const root=location.pathname; const el=id=>document.getElementById(id);
 async function post(action,data={}){await fetch(root+action,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});}
 el('login').onclick=()=>post('login');el('start').onclick=()=>post('start',{id:el('groups').value});el('stop').onclick=()=>post('stop');
+el('copy').onclick=async()=>{try{await navigator.clipboard.writeText(el('pair').value);el('copy').textContent='Copied';}catch{el('pair').select();}};
 let groupList='';async function refresh(){try{const s=await(await fetch(root+'state')).json();el('status').textContent=s.status;el('account').textContent=s.account?'Account: '+s.account:'';el('qr').hidden=!s.qr;if(s.qr)el('qr').src=s.qr;el('pin').textContent=s.pin?'Verification code: '+s.pin:'';
-const next=JSON.stringify(s.groups);if(next!==groupList){groupList=next;el('groups').replaceChildren(new Option('Select your test group',''),...s.groups.map(g=>new Option(g.name,g.id)));}el('reads').replaceChildren(...s.reads.map(t=>{const li=document.createElement('li');li.textContent=t;return li;}));el('diagnostics').textContent=JSON.stringify({connection:s.diagnostics,readerMode:s.readerMode,avi:s.bridge},null,2);}catch{el('status').textContent='Local test is not running.';}}setInterval(refresh,1000);refresh();
+const next=JSON.stringify(s.groups);if(next!==groupList){groupList=next;el('groups').replaceChildren(new Option('Select your test group',''),...s.groups.map(g=>new Option(g.name,g.id)));}el('pair').value=s.bridge.pairCommand;el('reads').replaceChildren(...s.reads.map(t=>{const li=document.createElement('li');li.textContent=t;return li;}));el('diagnostics').textContent=JSON.stringify({connection:s.diagnostics,readerMode:s.readerMode,avi:s.bridge},null,2);}catch{el('status').textContent='Local test is not running.';}}setInterval(refresh,1000);refresh();
 </script></html>`;
 
 Deno.serve({ hostname: '127.0.0.1', port: 8788, onListen() { console.log(`Open http://127.0.0.1:8788/${key}/`); } }, async req => {
@@ -134,7 +136,7 @@ Deno.serve({ hostname: '127.0.0.1', port: 8788, onListen() { console.log(`Open h
     selected = body.id; since = Date.now(); readers.clear(); state.reads = [];
     readerMode.configure(selected, selfId, selfId); handledMessages.clear(); bridge.reset();
     diagnostics.selectedGroupEvents = 0;
-    state.status = 'Group selected. From your Avi admin account send /reader link @person, then /reader on.';
+    state.status = 'Group selected. Copy the pairing command below, add a real @mention, and send it from your Avi admin account.';
   } else if (url.pathname === root+'stop') { selected = ''; readerMode.configure('', '', ''); bridge.reset(); state.status = 'Reader check stopped.'; }
   else return new Response('Not found', { status: 404 });
   return new Response('OK', { headers });

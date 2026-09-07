@@ -38,8 +38,11 @@ export function createReaderMode({ send, profile, now = Date.now, authorize, can
       const started = now();
       const sent = await send(group, { text: '🟢 Seen Mode enabled' });
       if (version !== generation) return true;
-      if (!/^\d+$/.test(String(sent?.id))) throw new Error('Read anchor was not confirmed');
-      session = { started, anchor: String(sent.id), users: new Map(), unlinked: new Set(), version };
+      // The private read watermark must be compared to a private message ID.
+      // Activating the mode does not itself count as a read event.
+      const anchor = message.id ?? sent?.id;
+      if (!/^\d+$/.test(String(anchor))) throw new Error('Read anchor was not confirmed');
+      session = { started, anchor: String(anchor), users: new Map(), unlinked: new Set(), version };
       status.active = true; status.readers = 0; status.confirmed = false; status.unlinkedReaders = 0;
     } else if (action === 'list') {
       const users = session ? [...session.users.values()].slice(0, 20) : [];

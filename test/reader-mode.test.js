@@ -10,6 +10,21 @@ async function setup() {
   return { mode, sent, command, read };
 }
 
+test('read anchor uses the private command ID rather than the unrelated Official Account ID', async () => {
+  const { createReaderMode } = await import('../experiments/reader/reader-mode.mjs');
+  const sent = [];
+  const mode = createReaderMode({ now: () => 1000, profile: async () => 'Name', send: async (g, message) => {
+    sent.push(message); return { id: '900000000000000000' };
+  } });
+  mode.configure('g', 'owner', 'observer');
+  await mode.command({ id: '100', to: 'g', from: 'owner', text: '/reader on' });
+  assert.equal(sent.length, 1);
+  await mode.event({ type: 55, param1: 'g', param2: 'owner', param3: '99', createdTime: 2000 });
+  assert.equal(sent.length, 1);
+  await mode.event({ type: 55, param1: 'g', param2: 'owner', param3: '101', createdTime: 2000 });
+  assert.equal(sent.length, 2);
+});
+
 test('only actual read of anchor or newer triggers one mention per session', async () => {
   const f = await setup();
   await f.command('/reader on');

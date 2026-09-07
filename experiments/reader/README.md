@@ -11,15 +11,15 @@ npm start --prefix experiments/reader
 
 Open the localhost URL, log in with the reader account by QR, select a group containing Avi, and click Start reader check. Send commands from your Avi owner or mini-admin account in that group:
 
-- `/reader link @person`: select a real LINE mention to link each reader once per local session.
+- Copy the `/reader link CODE` command displayed after selecting the group. Add a real `@person` mention to link each reader once per local session. Wait for Avi's `Linked users` confirmation.
 - `/reader on`: Avi sends the opening message and starts a reader session.
 - `/reader off`: stop and clear the list.
 - `/reader list`: show linked readers with up to 20 mentions.
 - `/reader status`: show whether actual read notifications were confirmed.
 
-Only current Avi owner/mini-admin accounts can control reader mode. Only the main owner can appoint mini admins. IDs are matched using the exact same message ID across the private client and Avi's verified webhook; mentioned users are matched by exact mention positions. Names and similarities between private and Official Account IDs are never used to guess a match. Unknown readers are counted in local diagnostics without sending incorrect mentions.
+Only current Avi owner/mini-admin accounts can control reader mode. Only the main owner can appoint mini admins. Pairing requires a random code from the local page. Commands are matched against Avi's verified webhook by message ID or an exact server timestamp plus SHA-256 of the complete command. Ambiguous matches fail closed. Mentioned users are matched by exact mention positions. Subsequent commands must match the already-linked sender and group. Names and similarities between IDs are never used to guess a match. Unknown readers are counted in local diagnostics without sending incorrect mentions.
 
-Only a fresh NOTIFIED_READ_MESSAGE for the selected group covering the opening message ID or newer triggers Hey @Name, once per reader per session, capped at 100 readers. The logged-in account is excluded. Ordinary messages never trigger greetings. Repeated ON requires OFF first. Failed greetings remain recorded to prevent repeated sends.
+Only a fresh NOTIFIED_READ_MESSAGE for the selected group covering the private connection's `/reader on` command ID or newer triggers Hey @Name, once per reader per session, capped at 100 readers. The Official Account's outgoing ID is not compared with private read watermarks. The logged-in account is excluded. Ordinary messages and activation commands never themselves trigger greetings. Repeated ON requires OFF first. Failed greetings remain recorded to prevent repeated sends.
 
 For verification, keep a linked person outside the group, send `/reader on` as an Avi admin, then have that person open Avi's new message without typing. Check both the local read count and Avi's actual greeting. The logged-in reader account cannot detect its own reads; use the separate mariam account as observer if Jay lu should be greeted. An absent notification is inconclusive, not proof that nobody read a message.
 
@@ -27,7 +27,7 @@ The login session, identity links and reader lists stay in memory. Restarting re
 
 Avi indexes only explicit `/reader` commands for ten minutes in Deno KV, storing sender/group IDs and mention positions without text. The read-only resolver requires a timestamped, domain-separated HMAC using the channel access token and rechecks admin roles on every lookup. An unauthorized user cannot establish the group link or link other people; their own `/reader link` can identify only themselves once the group is linked.
 
-Read notifications from two distinct users reached the previous local probe. The new bridge still needs a live end-to-end test confirming cross-API message IDs, Avi's read watermark, and Avi's actual greeting. Automated checks cover filtering, authenticated identity matching, mentions, authorization, duplicates, and stopping pending greetings. They do not prove live support. `node experiments/reader/check-avi.mjs` validates credentials, mention syntax and the deployed resolver without sending group messages. Official push messages use the account's message allowance.
+Read notifications reached the local probe. The initial bridge failed at cross-API command lookup before activation. The revised pairing-code and timestamp matching still needs a live end-to-end test confirming pairing and Avi's actual greeting. Automated checks cover differing API IDs, exact timestamps, ambiguous matches, authenticated identity matching, mentions, authorization, duplicates, and stopping pending greetings. They do not prove live support. `node experiments/reader/check-avi.mjs` validates credentials, mention syntax and the deployed resolver without sending group messages. Official push messages use the account's message allowance.
 
 Sources:
 - https://github.com/evex-dev/linejs

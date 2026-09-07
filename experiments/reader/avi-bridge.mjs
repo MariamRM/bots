@@ -1,4 +1,6 @@
-import { createHmac } from 'node:crypto';
+import { createHmac, createHash, randomBytes } from 'node:crypto';
+
+const fingerprint = message => ({ timestamp: Number(message.createdTime), commandHash: createHash('sha256').update(message.text || '').digest('hex') });
 
 // Correlate the SAME message, never names or similarities between provider IDs.
 export function createIdentityLink() {
@@ -10,7 +12,10 @@ export function createIdentityLink() {
     get size() { return users.size; },
     user(id) { return users.get(id); },
     observe(message, observation) {
-      if (String(message.id) !== observation.messageId || !message.from ||
+      const stamp = fingerprint(message);
+      const sameFingerprint = Number.isSafeInteger(stamp.timestamp) && stamp.timestamp > 0 &&
+        stamp.timestamp === observation.timestamp && stamp.commandHash === observation.commandHash;
+      if ((String(message.id) !== observation.messageId && !sameFingerprint) || !message.from ||
           !/^C[0-9a-f]{32}$/.test(observation.groupId) || !/^U[0-9a-f]{32}$/.test(observation.userId)) throw new Error('Unverified identity link');
       if (!group && !observation.authorized) return;
       if (group && group !== observation.groupId) throw new Error('Group identity conflict');
@@ -54,11 +59,17 @@ export function officialMessage(message, identity) {
 export function createAviBridge({ token, baseUrl, request = fetch, now = Date.now }) {
   const identity = createIdentityLink();
   let generation = 0;
-  const status = { linkedUsers: 0, groupLinked: false, lastError: '', sentByAvi: 0 };
+  let pairCode = randomBytes(12).toString('hex');
+  const status = { linkedUsers: 0, groupLinked: false, lastError: '', sentByAvi: 0, pairCommand: '/reader link ' + pairCode };
   async function observe(message) {
     const version = generation;
     if (!/^\/reader\s+(on|off|status|list|link)(?:\s|$)/i.test(message.text || '')) return null;
-    const body = JSON.stringify({ messageId: String(message.id) });
+    const pairing = message.text.trim().startsWith('/reader link ' + pairCode + ' ') || message.text.trim() === '/reader link ' + pairCode;
+    if (!pairing && !identity.user(message.from)) {
+      status.lastError = 'Copy the pairing command from the reader page, add a real @mention, and send it as your Avi admin.';
+      throw new Error(status.lastError);
+    }
+    const body = JSON.stringify({ messageId: String(message.id), ...fingerprint(message) });
     let response;
     for (let attempt = 0; attempt < 4; attempt++) {
       const timestamp = String(now());
@@ -71,11 +82,12 @@ export function createAviBridge({ token, baseUrl, request = fetch, now = Date.no
       if (attempt < 3) await new Promise(resolve => setTimeout(resolve, 700));
     }
     if (!response.ok) {
-      status.lastError = `Avi link lookup failed (${response.status}). Check the latest deployment and send a fresh /reader command.`;
+      status.lastError = `Avi command match failed (${response.status}). The reader has not paired this command with Avi's webhook.`;
       throw new Error(status.lastError);
     }
     const observation = await response.json();
     if (version !== generation) return null;
+    if (!pairing && (observation.userId !== identity.user(message.from) || observation.groupId !== identity.group)) throw new Error('Command identity does not match');
     identity.observe(message, observation);
     status.linkedUsers = identity.size; status.groupLinked = Boolean(identity.group); status.lastError = '';
     return observation;
@@ -97,6 +109,7 @@ export function createAviBridge({ token, baseUrl, request = fetch, now = Date.no
   }
   return { identity, status, observe, send, reset() {
     generation++;
+    pairCode = randomBytes(12).toString('hex'); status.pairCommand = '/reader link ' + pairCode;
     identity.reset(); Object.assign(status, { linkedUsers: 0, groupLinked: false, lastError: '', sentByAvi: 0 });
   } };
 }
