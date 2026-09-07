@@ -19,6 +19,21 @@ for (const [name, value] of Object.entries({ CHANNEL_ACCESS_TOKEN, CHANNEL_SECRE
 
 const { createModeration } = require('./moderation');
 const moderation = createModeration({ reply: replyMessage, api: lineApi });
+const { createReaderLink, validRequest } = require('./reader-link');
+const readerLink = createReaderLink();
+
+app.post('/reader/resolve', express.raw({ type: 'application/json', limit: '2kb' }), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.set('X-Avi-Reader-Version', '1');
+  if (!validRequest(req.body, req.headers['x-avi-reader-time'], req.headers['x-avi-reader-signature'], CHANNEL_SECRET)) return res.sendStatus(401);
+  let id;
+  try { id = JSON.parse(req.body.toString()).messageId; } catch { return res.sendStatus(400); }
+  if (typeof id !== 'string' || !/^\d{1,30}$/.test(id)) return res.sendStatus(400);
+  try {
+    const value = await readerLink.resolve(id);
+    return value ? res.json(value) : res.sendStatus(404);
+  } catch { return res.sendStatus(503); }
+});
 
 async function lineApi(path) {
   const response = await fetch('https://api.line.me/v2/bot' + path, {
@@ -58,7 +73,7 @@ app.post(
       if (!body || !Array.isArray(body.events)) return res.sendStatus(400);
 
       // Complete replies before ending the request in a serverless runtime.
-      const results = await Promise.allSettled(body.events.map(event => moderation.handle(event)));
+      const results = await Promise.allSettled(body.events.flatMap(event => [moderation.handle(event), readerLink.observe(event)]));
       for (const result of results) {
         if (result.status === "rejected") console.error("LINE event processing failed");
       }

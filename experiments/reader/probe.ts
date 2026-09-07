@@ -2,8 +2,14 @@ import { loginWithQR, type Client } from '@evex/linejs';
 import QRCode from 'qrcode';
 import { inspectRead } from './event-check.mjs';
 import { createReaderMode } from './reader-mode.mjs';
+import { createAviBridge } from './avi-bridge.mjs';
+import { parse } from 'npm:dotenv@17.4.2';
 
-// Local, memory-only experiment. No Official Account token is loaded.
+// Credentials stay in the local process; the browser never receives them.
+const credentials = parse(await Deno.readTextFile(new URL('../../.env', import.meta.url)));
+if (!credentials.CHANNEL_ACCESS_TOKEN || !credentials.CHANNEL_SECRET) throw new Error('Configure the local .env channel credentials first');
+const bridge = createAviBridge({ token: credentials.CHANNEL_ACCESS_TOKEN, secret: credentials.CHANNEL_SECRET,
+  baseUrl: 'https://bots-63.mariamrm.deno.net' });
 const key = crypto.randomUUID();
 let client: Client | undefined;
 let busy = false;
@@ -14,8 +20,10 @@ const handledMessages = new Set<string>();
 const readerMode = createReaderMode({
   async send(to: string, message: { text: string; contentMetadata?: Record<string, string> }) {
     if (!client || to !== selected) throw new Error('Reader group is not connected');
-    return await client.base.talk.sendMessage({ to, ...message, e2ee: true });
+    return await bridge.send(message);
   },
+  authorize: (message: { authorized?: boolean }) => message.authorized === true,
+  canMention: (id: string) => Boolean(bridge.identity.user(id)),
   async profile(mid: string) { return (await client!.base.talk.getContact({ mid })).displayName; }
 });
 const readers = new Set<string>();
@@ -39,7 +47,7 @@ async function login() {
     state.account = me.displayName; selfId = me.mid;
     state.groups = (await client.fetchJoinedChats()).map(chat => ({ id: chat.mid, name: chat.name }));
     state.status = 'Logged in. Select only your test group, then start the check.';
-    // Read raw operations only. Do not decrypt, display, or store chat messages.
+    // Group messages are inspected for explicit reader commands only; never stored or displayed.
     const polling = client.base.createPolling();
     void (async () => {
       try {
@@ -54,18 +62,26 @@ async function login() {
           diagnostics.lastEvent = new Date().toLocaleTimeString();
           if (selected && (op.param1 === selected || op.message?.to === selected)) diagnostics.selectedGroupEvents++;
           if (['55', 'NOTIFIED_READ_MESSAGE'].includes(String(op.type))) diagnostics.readEvents++;
-          // Commands are accepted only from the logged-in account in the locally selected group.
-          // Other users' message content is not decrypted or used as a read trigger.
+          // Avi's signed webhook correlates identities and checks the actual bot-admin role.
           if (selected && ['SEND_MESSAGE', 'RECEIVE_MESSAGE', '25', '26'].includes(String(op.type)) &&
-              op.message?.to === selected && op.message.from === selfId && Number(op.createdTime) >= since) {
+              op.message?.to === selected && Number(op.createdTime) >= since) {
             const id = String(op.message.id);
             if (!handledMessages.has(id)) {
               handledMessages.add(id);
               if (handledMessages.size > 1000) handledMessages.delete(handledMessages.values().next().value!);
               try {
                 const message = await client!.base.e2ee.decryptE2EEMessage(op.message);
-                await readerMode.command(message);
-              } catch { state.status = 'Reader command failed to decrypt or send. No reader greeting was confirmed.'; }
+                const observation = await bridge.observe(message);
+                if (observation) {
+                  if (observation.action === 'link') {
+                    state.status = `Avi identity links: ${bridge.identity.size}. Now use /reader on and open its message without typing.`;
+                    if (observation.authorized) await bridge.send({ text: `Linked users: ${bridge.identity.size}` });
+                  } else {
+                    await readerMode.command({ ...message, authorized: observation.authorized });
+                    if (!observation.authorized) state.status = 'Only the main owner or an Avi mini admin can control reader mode.';
+                  }
+                }
+              } catch { state.status = bridge.status.lastError || 'Reader command or identity linking failed. No greeting was confirmed.'; }
             }
           }
           await readerMode.event(op);
@@ -89,17 +105,18 @@ async function login() {
 
 const html = `<!doctype html><html><meta charset="utf-8"><title>Avi reader test</title>
 <style>body{font:18px system-ui;background:#f5f0ff;color:#302047;max-width:720px;margin:40px auto;padding:20px}button,select{font:inherit;padding:12px;margin:8px 0}img{width:280px}#pin{font-size:32px}li{margin:12px 0}</style>
-<h1>Avi reader test</h1><p>Reader greetings use read notifications only. Login lasts while this process runs.</p>
+<h1>Avi reader bridge</h1><p>Avi sends greetings from verified read notifications. Keep this local process running.</p>
 <button id="login">Log in with the new account</button><p id="status"></p><p id="account"></p><img id="qr" hidden><p id="pin"></p>
 <select id="groups"><option value="">Select your test group</option></select><br><button id="start">Start reader check</button><button id="stop">Stop check</button>
-<ol><li>Log in with mariam, select the test group, and press Start reader check.</li><li>Using mariam in that group, send <b>/reader on</b>. This account sends the opening message and reader greetings.</li><li>Open that message with your other account without typing. A supported read event triggers Hey @Name once.</li><li>From mariam, use <b>/reader list</b>, <b>/reader status</b>, or <b>/reader off</b>. Other accounts cannot control this experiment.</li></ol>
+<ol><li>Log in with the reader account, select a group containing Avi, and press Start reader check.</li><li>From your Avi owner/admin account, send <b>/reader link @person</b>, selecting a real LINE mention. Link each person you want Avi to mention once per local login.</li><li>Send <b>/reader on</b> as an Avi admin. Avi must reply with Seen Mode enabled.</li><li>Have a linked person open that new message without typing. If their read event arrives, Avi sends <b>Hey @Name</b> once.</li><li>Use <b>/reader list</b>, <b>/reader status</b>, or <b>/reader off</b> as an Avi admin.</li></ol>
+<p>The logged-in reader account cannot detect its own reads. Other linked accounts, including the admin who enables the mode, are eligible. This bridge is experimental until Avi's greeting is confirmed in a live test.</p>
 <p>No notification means this test has not confirmed reader detection. It does not prove nobody read your message.</p><ul id="reads"></ul><h2>Connection check</h2><pre id="diagnostics"></pre>
 <script>
 const root=location.pathname; const el=id=>document.getElementById(id);
 async function post(action,data={}){await fetch(root+action,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});}
 el('login').onclick=()=>post('login');el('start').onclick=()=>post('start',{id:el('groups').value});el('stop').onclick=()=>post('stop');
 let groupList='';async function refresh(){try{const s=await(await fetch(root+'state')).json();el('status').textContent=s.status;el('account').textContent=s.account?'Account: '+s.account:'';el('qr').hidden=!s.qr;if(s.qr)el('qr').src=s.qr;el('pin').textContent=s.pin?'Verification code: '+s.pin:'';
-const next=JSON.stringify(s.groups);if(next!==groupList){groupList=next;el('groups').replaceChildren(new Option('Select your test group',''),...s.groups.map(g=>new Option(g.name,g.id)));}el('reads').replaceChildren(...s.reads.map(t=>{const li=document.createElement('li');li.textContent=t;return li;}));el('diagnostics').textContent=JSON.stringify({connection:s.diagnostics,readerMode:s.readerMode},null,2);}catch{el('status').textContent='Local test is not running.';}}setInterval(refresh,1000);refresh();
+const next=JSON.stringify(s.groups);if(next!==groupList){groupList=next;el('groups').replaceChildren(new Option('Select your test group',''),...s.groups.map(g=>new Option(g.name,g.id)));}el('reads').replaceChildren(...s.reads.map(t=>{const li=document.createElement('li');li.textContent=t;return li;}));el('diagnostics').textContent=JSON.stringify({connection:s.diagnostics,readerMode:s.readerMode,avi:s.bridge},null,2);}catch{el('status').textContent='Local test is not running.';}}setInterval(refresh,1000);refresh();
 </script></html>`;
 
 Deno.serve({ hostname: '127.0.0.1', port: 8788, onListen() { console.log(`Open http://127.0.0.1:8788/${key}/`); } }, async req => {
@@ -108,17 +125,17 @@ Deno.serve({ hostname: '127.0.0.1', port: 8788, onListen() { console.log(`Open h
   const headers = { 'Cache-Control': 'no-store', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer' };
   if (url.host !== '127.0.0.1:8788' || !url.pathname.startsWith(root)) return new Response('Not found', { status: 404 });
   if (req.method === 'GET' && url.pathname === root) return new Response(html, { headers: { ...headers, 'Content-Type': 'text/html; charset=utf-8' } });
-  if (req.method === 'GET' && url.pathname === root+'state') return Response.json({ ...state, diagnostics, readerMode: readerMode.status }, { headers });
+  if (req.method === 'GET' && url.pathname === root+'state') return Response.json({ ...state, diagnostics, readerMode: readerMode.status, bridge: bridge.status }, { headers });
   if (req.method !== 'POST' || req.headers.get('origin') !== url.origin) return new Response('Forbidden', { status: 403 });
   if (url.pathname === root+'login') void login();
   else if (url.pathname === root+'start') {
     const body = await req.json().catch(() => ({}));
     if (!client || !state.groups.some(g => g.id === body.id)) return new Response('Select a group first', { status: 400 });
     selected = body.id; since = Date.now(); readers.clear(); state.reads = [];
-    readerMode.configure(selected, selfId, selfId); handledMessages.clear();
+    readerMode.configure(selected, selfId, selfId); handledMessages.clear(); bridge.reset();
     diagnostics.selectedGroupEvents = 0;
-    state.status = 'Group selected. From mariam send /reader on. Live read delivery is not verified yet.';
-  } else if (url.pathname === root+'stop') { selected = ''; readerMode.configure('', '', ''); state.status = 'Reader check stopped.'; }
+    state.status = 'Group selected. From your Avi admin account send /reader link @person, then /reader on.';
+  } else if (url.pathname === root+'stop') { selected = ''; readerMode.configure('', '', ''); bridge.reset(); state.status = 'Reader check stopped.'; }
   else return new Response('Not found', { status: 404 });
   return new Response('OK', { headers });
 });

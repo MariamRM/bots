@@ -268,7 +268,7 @@ test('only authorized group admins can change Seen Mode or open the admin menu',
 test('Official Account rejects reader activation and never greets message senders', async () => {
   const f = setup();
   await f.bot.handle(f.event('/avi seen on', admin));
-  assert.match(f.replies.at(-1), /Reader detection is not connected/);
+  assert.match(f.replies.at(-1), /Reader detection needs the local reader bridge/);
   const count = f.replies.length;
   await f.bot.handle(f.event('hello', member));
   await f.bot.handle(f.event('hello', owner));

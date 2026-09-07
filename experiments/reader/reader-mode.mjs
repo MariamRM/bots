@@ -13,17 +13,17 @@ export function mentionMessage(prefix, users) {
   return { text, contentMetadata: { MENTION: JSON.stringify({ MENTIONEES: mentions }) } };
 }
 
-export function createReaderMode({ send, profile, now = Date.now }) {
+export function createReaderMode({ send, profile, now = Date.now, authorize, canMention = (id) => true }) {
   let group = '', owner = '', self = '', session;
   let generation = 0;
   let commands = [];
-  const status = { active: false, readers: 0, sentGreetings: 0, sendFailures: 0, confirmed: false };
+  const status = { active: false, readers: 0, sentGreetings: 0, sendFailures: 0, confirmed: false, unlinkedReaders: 0 };
   function configure(g, o, s) {
     group = g; owner = o; self = s; session = undefined; generation++; commands = [];
-    Object.assign(status, { active: false, readers: 0, sentGreetings: 0, sendFailures: 0, confirmed: false });
+    Object.assign(status, { active: false, readers: 0, sentGreetings: 0, sendFailures: 0, confirmed: false, unlinkedReaders: 0 });
   }
   async function command(message) {
-    if (!group || message.to !== group || ![owner, self].includes(message.from)) return false;
+    if (!group || message.to !== group || !(authorize ? await authorize(message) : [owner, self].includes(message.from))) return false;
     const action = message.text?.trim().match(/^\/reader\s+(on|off|list|status)$/i)?.[1]?.toLowerCase();
     if (!action) return false;
     commands = commands.filter(t => now() - t < 10000);
@@ -39,10 +39,10 @@ export function createReaderMode({ send, profile, now = Date.now }) {
       const sent = await send(group, { text: '🟢 Seen Mode enabled' });
       if (version !== generation) return true;
       if (!/^\d+$/.test(String(sent?.id))) throw new Error('Read anchor was not confirmed');
-      session = { started, anchor: String(sent.id), users: new Map(), version };
-      status.active = true; status.readers = 0; status.confirmed = false;
+      session = { started, anchor: String(sent.id), users: new Map(), unlinked: new Set(), version };
+      status.active = true; status.readers = 0; status.confirmed = false; status.unlinkedReaders = 0;
     } else if (action === 'list') {
-      const users = session ? [...session.users.values()].slice(0, 30) : [];
+      const users = session ? [...session.users.values()].slice(0, 20) : [];
       await send(group, users.length ? mentionMessage(`👁 Readers: ${session.users.size}\n`, users) : { text: 'No readers confirmed in this session.' });
     } else {
       await send(group, { text: `Reader mode: ${status.active ? 'ON' : 'OFF'}\nRead events confirmed: ${status.confirmed ? 'Yes' : 'Not yet'}\nReaders: ${status.readers}\nGreetings sent: ${status.sentGreetings}` });
@@ -55,6 +55,11 @@ export function createReaderMode({ send, profile, now = Date.now }) {
     const check = inspectRead(op, group, current.started);
     if (check.result !== 'reader' || check.userId === self) return;
     if (!/^\d+$/.test(String(op.param3)) || BigInt(op.param3) < BigInt(current.anchor)) return;
+    if (!canMention(check.userId)) {
+      if (current.unlinked.size < 1000) current.unlinked.add(check.userId);
+      status.unlinkedReaders = current.unlinked.size;
+      return;
+    }
     if (current.users.has(check.userId) || current.users.size >= 100) return;
     const user = { id: check.userId, name: 'user' };
     current.users.set(check.userId, user);

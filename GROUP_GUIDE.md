@@ -35,9 +35,9 @@ Mini admins can use the admin menu, warnings and other moderation commands in th
 
 Automatic greetings triggered by ordinary messages have been removed. The Official Account cannot detect silent readers and `/avi seen` explains the separate reader companion. The explicit owner/admin `.` greeting remains available.
 
-The experimental regular-account companion is in `experiments/reader`. Once logged in locally, select the test group, start the check, then use that logged-in account to send `/reader on`, `/reader off`, `/reader list`, or `/reader status` in the group. Other accounts cannot control this experiment. It responds to read notifications covering its opening message or a later message, once per reader per session, with an actual mention. It ignores ordinary messages as greeting triggers.
+The experimental bridge is in `experiments/reader`. Log in locally with the reader account and select a group containing Avi. From your Avi owner/mini-admin account, send `/reader link @person` using real mentions, then `/reader on`. Avi sends the opening message and greetings with real mentions. `/reader off`, `/reader list`, and `/reader status` use your current Avi admin permissions. Ordinary messages never trigger greetings. The reader account itself cannot be detected as a reader.
 
-This unofficial connection has not passed a live reader-delivery test and is not represented as LINE-approved. It runs locally while the process stays open; restarting clears sessions, reader lists and login. It is separate from Avi's existing owner/mini-admin permissions. See `experiments/reader/README.md`.
+Read notifications reached the local probe, but the new bridge still needs a live test confirming cross-API identity matching and Avi's actual greeting. It is not represented as LINE-approved. It runs locally while the process stays open; restarting clears sessions, identity links, reader lists and login. See `experiments/reader/README.md` for setup and verification.
 
 ### Deno storage for mini-admin roles and legacy session cleanup
 

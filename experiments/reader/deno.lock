@@ -10,6 +10,7 @@
     "npm:crypto-js@^4.2.0": "4.2.0",
     "npm:curve25519-js@^0.0.4": "0.0.4",
     "npm:deno@2.9.6": "2.9.6",
+    "npm:dotenv@17.4.2": "17.4.2",
     "npm:node-bignumber@^1.2.2": "1.2.2",
     "npm:node-int64@0.4": "0.4.0",
     "npm:opusscript@~0.1.1": "0.1.1",
@@ -164,6 +165,9 @@
     },
     "dijkstrajs@1.0.3": {
       "integrity": "sha512-qiSlmBq9+BCdCA/L46dw8Uy93mloxsPSbwnm5yrKn2vMPiy8KyAskTF6zuV/j5BMsmOGZDPs7KjU+mjb670kfA=="
+    },
+    "dotenv@17.4.2": {
+      "integrity": "sha512-nI4U3TottKAcAD9LLud4Cb7b2QztQMUEfHbvhTH09bqXTxnSie8WnjPALV/WMCrJZ6UV/qHJ6L03OqO3LcdYZw=="
     },
     "emoji-regex@8.0.0": {
       "integrity": "sha512-MSjYzcWNOA0ewAHpz0MxpYFvwg6yjy1NG3xteoqz644VCo/RPgnr1/GGt+ic3iJTzQ8Eu3TdM14SawnVUmGE6A=="

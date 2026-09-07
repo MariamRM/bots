@@ -10,8 +10,12 @@ const HELP = `Avi group protection
 Bot admins, inside their assigned group:
 /avi admin — AVI ADMIN menu
 . — quick admin greeting (ordinary members get no reply)
-/avi seen on — start one greeting per user per session
-/avi seen off — end the session; ON again starts a new list
+/avi seen — reader setup and controls
+/reader link @person — link a reader for Avi mentions
+/reader on — start reader mode with the local bridge running
+/reader off — stop reader mode
+/reader list — linked readers observed in this session
+/reader status — check reader mode
 /avi status — group name, member count and monitoring status
 /avi members — recently observed users (not a complete member list)
 /avi seen @person — last event observed by this bot instance
@@ -174,7 +178,7 @@ function createModeration({ reply, api, env = process.env, now = Date.now, seenS
         const action = text.trim().split(/\s+/)[2]?.toLowerCase();
         try {
           if (action === 'on') {
-            return say('Reader detection is not connected to this Official Account. Use /reader on with the logged-in reader account. Writing messages no longer triggers Seen greetings.');
+            return say('Reader detection needs the local reader bridge running. As an Avi admin, use /reader link @person, then /reader on. Writing messages does not trigger Seen greetings.');
           }
           if (action === 'off') {
             await seenStore.stop(groupId);
